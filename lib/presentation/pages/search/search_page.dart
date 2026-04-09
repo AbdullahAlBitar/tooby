@@ -7,15 +7,17 @@ import '../../../providers/video_provider.dart';
 
 final searchQueryProvider = StateProvider.autoDispose<String>((ref) => "");
 final selectedTagIdsProvider = StateProvider.autoDispose<List<int>>((ref) => []);
+final matchAllTagsProvider = StateProvider.autoDispose<bool>((ref) => false);
 
 final searchResultsProvider = FutureProvider.autoDispose<List<VideoModel>>((ref) async {
   final query = ref.watch(searchQueryProvider);
   final tagIds = ref.watch(selectedTagIdsProvider);
+  final matchAll = ref.watch(matchAllTagsProvider);
   
   if (query.isEmpty && tagIds.isEmpty) return [];
   
   final repo = ref.watch(videoRepositoryProvider);
-  return await repo.searchVideos(query, tagIds);
+  return await repo.searchVideos(query, tagIds, matchAllTags: matchAll);
 });
 
 class SearchPage extends ConsumerWidget {
@@ -156,10 +158,21 @@ class TagFilterSheet extends ConsumerWidget {
               TextButton(
                 onPressed: () {
                   ref.read(selectedTagIdsProvider.notifier).state = [];
+                  ref.read(matchAllTagsProvider.notifier).state = false;
                 },
                 child: const Text("Clear All"),
               ),
             ],
+          ),
+          const Divider(),
+          SwitchListTile(
+            title: const Text("Match all selected tags"),
+            subtitle: const Text("Show videos containing every selected tag"),
+            value: ref.watch(matchAllTagsProvider),
+            activeColor: AppColors.primary,
+            onChanged: (value) {
+              ref.read(matchAllTagsProvider.notifier).state = value;
+            },
           ),
           const Divider(),
           Flexible(

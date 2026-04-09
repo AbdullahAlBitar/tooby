@@ -3,6 +3,7 @@ import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/watch_history_model.dart';
 import '../../providers/video_provider.dart';
@@ -45,6 +46,9 @@ class _VideoPlayerWidgetState extends ConsumerState<VideoPlayerWidget> {
         await _videoPlayerController.seekTo(widget.initialPosition);
       }
 
+      // Enable wakelock to prevent screen from dimming
+      await WakelockPlus.enable();
+
       _chewieController = ChewieController(
         videoPlayerController: _videoPlayerController,
         autoPlay: true,
@@ -53,6 +57,7 @@ class _VideoPlayerWidgetState extends ConsumerState<VideoPlayerWidget> {
         allowFullScreen: true,
         allowMuting: true,
         showControls: true,
+        wakelock: true, // Redundant but good practice
         materialProgressColors: ChewieProgressColors(
           playedColor: AppColors.primary,
           handleColor: AppColors.primary,
@@ -88,6 +93,8 @@ class _VideoPlayerWidgetState extends ConsumerState<VideoPlayerWidget> {
 
   @override
   void dispose() {
+    // Disable wakelock when the player is disposed
+    WakelockPlus.disable();
     _videoPlayerController.removeListener(_onPositionChanged);
     _videoPlayerController.dispose();
     _chewieController?.dispose();

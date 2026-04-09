@@ -290,7 +290,7 @@ class LibraryPage extends ConsumerWidget {
                   child: SwitchListTile(
                     title: const Text("Auto-Tag by Folder Name", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                     value: ref.watch(autoTagByFolderProvider),
-                    activeColor: AppColors.primary,
+                    activeThumbColor: AppColors.primary,
                     onChanged: (val) {
                       ref.read(autoTagByFolderProvider.notifier).state = val;
                     },

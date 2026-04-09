@@ -77,38 +77,34 @@ class VideoRepository {
     await _dbHelper.rawDelete('DELETE FROM watch_history', []);
   }
 
-  Future<List<VideoModel>> searchVideos(String query, List<int> tagIds) async {
+  Future<List<VideoModel>> searchVideos(String query, List<int> tagIds, {bool matchAllTags = false}) async {
     String sql = 'SELECT v.*, COUNT(vt.tag_id) as match_count FROM videos v';
     List<dynamic> args = [];
-    List<String> conditions = [];
 
-    // Always join video_tags if we want to count matches, but use LEFT JOIN
-    // so we don't exclude videos with no tags if we're also searching by title.
     if (tagIds.isNotEmpty) {
       sql += ' LEFT JOIN video_tags vt ON v.id = vt.video_id AND vt.tag_id IN (${List.filled(tagIds.length, '?').join(',')})';
       args.addAll(tagIds);
-      conditions.add('match_count > 0');
     } else {
       sql += ' LEFT JOIN video_tags vt ON v.id = vt.video_id';
     }
 
-    if (query.isNotEmpty) {
-      conditions.add('v.title LIKE ?');
-      args.add('%$query%');
-    }
-
     sql += ' GROUP BY v.id';
 
-    if (conditions.isNotEmpty) {
-      // Use HAVING because match_count is an aggregate
+    final tagCount = tagIds.length;
+    final tagCondition = matchAllTags ? 'match_count = ?' : 'match_count > 0';
+
+    if (tagIds.isNotEmpty || query.isNotEmpty) {
+      sql += ' HAVING ';
       if (tagIds.isNotEmpty && query.isNotEmpty) {
-        sql += ' HAVING (match_count > 0 OR v.title LIKE ?)';
-        args.add('%$query%'); // Add query again for HAVING
+        sql += '($tagCondition OR v.title LIKE ?)';
+        if (matchAllTags) args.add(tagCount);
+        args.add('%$query%');
       } else if (tagIds.isNotEmpty) {
-        sql += ' HAVING match_count > 0';
+        sql += tagCondition;
+        if (matchAllTags) args.add(tagCount);
       } else if (query.isNotEmpty) {
-        sql += ' HAVING v.title LIKE ?';
-        args.add('%$query%'); // Add query again for HAVING
+        sql += 'v.title LIKE ?';
+        args.add('%$query%');
       }
     }
 
