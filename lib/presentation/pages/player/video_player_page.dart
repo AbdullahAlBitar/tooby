@@ -28,6 +28,22 @@ class VideoPlayerPage extends ConsumerWidget {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh, color: AppColors.primary),
+            onPressed: () async {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Regenerating thumbnail...")),
+              );
+              await ref.read(videoScannerServiceProvider).regenerateThumbnailById(videoId);
+              ref.invalidate(videoByIdProvider(videoId));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Thumbnail updated!")),
+                );
+              }
+            },
+            tooltip: 'Refresh Thumbnail',
+          ),
+          IconButton(
             icon: const Icon(Icons.close, color: AppColors.primary),
             onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
             tooltip: 'Close Player',

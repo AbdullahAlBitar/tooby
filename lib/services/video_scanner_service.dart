@@ -67,19 +67,24 @@ class VideoScannerService {
     final String title = p.basenameWithoutExtension(file.path);
     final String path = file.path;
 
-    // Extract duration
+    // Extract duration and calculate thumbnail offset
     String? durationStr;
+    int? thumbOffsetMs;
     try {
       final info = await _videoInfo.getVideoInfo(path);
       if (info != null && info.duration != null) {
         durationStr = _formatDuration(info.duration!);
+        // Pick a point at 10% of the video, max 20 seconds, min 1 second
+        thumbOffsetMs = (info.duration! * 0.1).toInt();
+        // if (thumbOffsetMs > 20000) thumbOffsetMs = 20000;
+        if (thumbOffsetMs < 1000) thumbOffsetMs = 1000;
       }
     } catch (e) {
       debugPrint('Error extracting duration for $path: $e');
     }
 
-    // Generate thumbnail
-    final String? thumbnailPath = await _thumbnailService.generateThumbnail(path);
+    // Generate thumbnail with calculated offset
+    final String? thumbnailPath = await _thumbnailService.generateThumbnail(path, timeMs: thumbOffsetMs);
 
     final VideoModel video = VideoModel(
       path: path,
@@ -104,6 +109,38 @@ class VideoScannerService {
     }
   }
 
+  Future<void> regenerateAllThumbnails() async {
+    final List<VideoModel> videos = await _videoRepository.getAllVideos();
+    for (var video in videos) {
+      await regenerateThumbnailById(video.id!);
+    }
+  }
+
+  Future<String?> regenerateThumbnailById(int videoId) async {
+    final video = await _videoRepository.getVideoById(videoId);
+    if (video == null) return null;
+
+    int? thumbOffsetMs;
+    try {
+      final info = await _videoInfo.getVideoInfo(video.path);
+      if (info != null && info.duration != null) {
+        thumbOffsetMs = (info.duration! * 0.1).toInt();
+        if (thumbOffsetMs > 20000) thumbOffsetMs = 20000;
+        if (thumbOffsetMs < 1000) thumbOffsetMs = 1000;
+      }
+    } catch (e) {
+      debugPrint('Error getting info for ${video.path}: $e');
+    }
+
+    // Force regeneration by providing a timeMs (ThumbnailService logic preserves existing if timeMs is null)
+    final String? newThumb = await _thumbnailService.generateThumbnail(video.path, timeMs: thumbOffsetMs ?? 15000);
+    
+    if (newThumb != null) {
+      await _videoRepository.updateVideo(video.copyWith(thumbnail: newThumb));
+    }
+    return newThumb;
+  }
+
   Future<void> refreshAllDurations() async {
     final List<VideoModel> videos = await _videoRepository.getAllVideos();
     for (var video in videos) {
@@ -112,7 +149,7 @@ class VideoScannerService {
           final info = await _videoInfo.getVideoInfo(video.path);
           if (info != null && info.duration != null) {
             final String durationStr = _formatDuration(info.duration!);
-            await _videoRepository.insertVideo(video.copyWith(duration: durationStr));
+            await _videoRepository.updateVideo(video.copyWith(duration: durationStr));
           }
         } catch (e) {
           debugPrint('Error refreshing duration for ${video.path}: $e');

@@ -57,7 +57,6 @@ class _VideoPlayerWidgetState extends ConsumerState<VideoPlayerWidget> {
         allowFullScreen: true,
         allowMuting: true,
         showControls: true,
-        wakelock: true, // Redundant but good practice
         materialProgressColors: ChewieProgressColors(
           playedColor: AppColors.primary,
           handleColor: AppColors.primary,

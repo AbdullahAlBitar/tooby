@@ -38,9 +38,17 @@ class SettingsPage extends ConsumerWidget {
           const Divider(color: AppColors.outlineVariant),
           _buildSettingItem(
             context,
+            icon: Icons.image_search_outlined,
+            title: "Fix Video Thumbnails",
+            subtitle: "Regenerate all thumbnails to avoid black frames",
+            onTap: () => _showRegenerateThumbnailsDialog(context, ref),
+          ),
+          const Divider(color: AppColors.outlineVariant),
+          _buildSettingItem(
+            context,
             icon: Icons.info_outline,
             title: "About Tooby",
-            subtitle: "Version 1.0.0 • Offline Video Player",
+            subtitle: "Version 1.0.0+3 • Offline Video Player",
             onTap: () {},
           ),
         ],
@@ -78,6 +86,37 @@ class SettingsPage extends ConsumerWidget {
               if (context.mounted) Navigator.pop(context);
             },
             child: const Text("Clear", style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRegenerateThumbnailsDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Regenerate All Thumbnails?"),
+        content: const Text(
+          "This will update thumbnails for all videos using smarter positioning to avoid black frames. It may take a few minutes if you have many videos.",
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Regenerating all thumbnails in background...")),
+              );
+              await ref.read(videoScannerServiceProvider).regenerateAllThumbnails();
+              ref.invalidate(allVideosProvider);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("All thumbnails regenerated!")),
+                );
+              }
+            },
+            child: const Text("Regenerate"),
           ),
         ],
       ),
