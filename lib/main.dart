@@ -9,6 +9,7 @@ import 'presentation/pages/player/video_player_page.dart';
 import 'presentation/pages/tags/video_tag_editor_page.dart';
 import 'presentation/pages/search/search_page.dart';
 import 'presentation/pages/tags/tag_feed_page.dart';
+import 'presentation/pages/tags/manage_tag_types_page.dart';
 
 final navigationIndexProvider = StateProvider<int>((ref) => 0);
 
@@ -61,6 +62,8 @@ class ToobyApp extends StatelessWidget {
                 tagName: args['tagName'],
               ),
             );
+          case '/manage-tag-types':
+            return MaterialPageRoute(builder: (_) => const ManageTagTypesPage());
           default:
             return MaterialPageRoute(builder: (_) => const MainNavigationScreen());
         }

@@ -4,6 +4,7 @@ import '../data/repositories/tag_repository.dart';
 import '../services/video_scanner_service.dart';
 import '../data/models/video_model.dart';
 import '../data/models/tag_model.dart';
+import '../data/models/tag_type_model.dart';
 
 // Repositories
 final videoRepositoryProvider = Provider((ref) => VideoRepository());
@@ -30,12 +31,21 @@ final continueWatchingProvider = FutureProvider<List<Map<String, dynamic>>>((ref
 
 final allTagsProvider = FutureProvider<List<TagModel>>((ref) async {
   final repo = ref.watch(tagRepositoryProvider);
-  return await repo.getAllTags();
+  final tags = await repo.getAllTags();
+  tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return tags;
 });
 
 final allTagsWithCountProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final repo = ref.watch(tagRepositoryProvider);
   return await repo.getAllTagsWithCount();
+});
+
+final allTagTypesProvider = FutureProvider<List<TagTypeModel>>((ref) async {
+  final repo = ref.watch(tagRepositoryProvider);
+  final types = await repo.getAllTagTypes();
+  types.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return types;
 });
 
 // Parameterized Providers

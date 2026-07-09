@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import '../data/models/video_model.dart';
@@ -180,6 +181,189 @@ class VideoScannerService {
       }
     }
   }
+
+  Future<int> removeMissingVideos() async {
+    final List<VideoModel> videos = await _videoRepository.getAllVideos();
+    int removedCount = 0;
+    for (var video in videos) {
+      if (video.id == null) continue;
+      final File file = File(video.path);
+      if (!await file.exists()) {
+        // Delete video database record (cascading deletes watch history and tag mappings)
+        await _videoRepository.deleteVideo(video.id!);
+        
+        // Delete generated thumbnail file if it exists
+        if (video.thumbnail != null && video.thumbnail!.isNotEmpty) {
+          try {
+            final File thumbFile = File(video.thumbnail!);
+            if (await thumbFile.exists()) {
+              await thumbFile.delete();
+            }
+          } catch (e) {
+            debugPrint('Error deleting thumbnail for missing video ${video.path}: $e');
+          }
+        }
+        removedCount++;
+      }
+    }
+    return removedCount;
+  }
+
+  String _getRelativePath(String filePath) {
+    final parts = p.split(filePath);
+    if (parts.length >= 2) {
+      return p.join(parts[parts.length - 2], parts[parts.length - 1]);
+    }
+    return parts.isNotEmpty ? parts.last : '';
+  }
+
+  Future<String> exportLibraryMetadata(String directoryPath) async {
+    final List<VideoModel> videos = await _videoRepository.getAllVideos();
+    final List<Map<String, dynamic>> exportedVideos = [];
+
+    for (var video in videos) {
+      if (video.id == null) continue;
+      final tags = await _tagRepository.getTagsForVideo(video.id!);
+      
+      final filename = p.basename(video.path);
+      final relativePath = _getRelativePath(video.path);
+
+      exportedVideos.add({
+        'title': video.title,
+        'path': video.path,
+        'filename': filename,
+        'relativePath': relativePath,
+        'tags': tags.map((t) => {
+          'name': t.name,
+          'type': t.typeName ?? 'default',
+        }).toList(),
+      });
+    }
+
+    final backupData = {
+      'version': 2,
+      'exportDate': DateTime.now().toIso8601String(),
+      'videos': exportedVideos,
+    };
+
+    final String jsonStr = jsonEncode(backupData);
+    final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+    final String fileName = 'tooby_backup_$timestamp.json';
+    final String fullPath = p.join(directoryPath, fileName);
+
+    final File backupFile = File(fullPath);
+    await backupFile.writeAsString(jsonStr);
+
+    return fileName;
+  }
+
+  Future<Map<String, int>> importLibraryMetadata(String filePath) async {
+    final File file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception("Backup file not found.");
+    }
+
+    final String jsonStr = await file.readAsString();
+    final Map<String, dynamic> backupData = jsonDecode(jsonStr);
+    
+    final List<dynamic> backupVideos = backupData['videos'] ?? [];
+    int matchedCount = 0;
+    int tagsAppliedCount = 0;
+
+    // Get all current videos in database to match against
+    final List<VideoModel> currentVideos = await _videoRepository.getAllVideos();
+
+    for (var backupVideo in backupVideos) {
+      final String? bPath = backupVideo['path'];
+      final String? bFilename = backupVideo['filename'];
+      final String? bRelativePath = backupVideo['relativePath'];
+      final List<dynamic> bTags = backupVideo['tags'] ?? [];
+
+      if (bTags.isEmpty) continue;
+
+      // Try to find a matching video in the current database
+      VideoModel? matchedVideo;
+
+      // 1. Match by exact path
+      if (bPath != null) {
+        for (var currentVideo in currentVideos) {
+          if (currentVideo.path == bPath) {
+            matchedVideo = currentVideo;
+            break;
+          }
+        }
+      }
+
+      // 2. Match by relative path suffix
+      if (matchedVideo == null && bRelativePath != null) {
+        final normBRel = p.normalize(bRelativePath).replaceAll('\\', '/');
+        for (var currentVideo in currentVideos) {
+          final normCurrent = p.normalize(currentVideo.path).replaceAll('\\', '/');
+          if (normCurrent.endsWith(normBRel)) {
+            matchedVideo = currentVideo;
+            break;
+          }
+        }
+      }
+
+      // 3. Match by filename
+      if (matchedVideo == null && bFilename != null) {
+        for (var currentVideo in currentVideos) {
+          if (p.basename(currentVideo.path) == bFilename) {
+            matchedVideo = currentVideo;
+            break;
+          }
+        }
+      }
+
+      // If matched, apply tags
+      if (matchedVideo != null && matchedVideo.id != null) {
+        matchedCount++;
+        final List<TagModel> currentTags = await _tagRepository.getTagsForVideo(matchedVideo.id!);
+        final Set<String> currentTagNames = currentTags.map((t) => t.name.toLowerCase()).toSet();
+
+        for (var tagValue in bTags) {
+          String tagName = '';
+          String typeName = 'default';
+
+          if (tagValue is String) {
+            tagName = tagValue;
+          } else if (tagValue is Map<String, dynamic>) {
+            tagName = tagValue['name'] ?? '';
+            typeName = tagValue['type'] ?? 'default';
+          }
+
+          if (tagName.isEmpty) continue;
+
+          // Get or create tag type
+          final int typeId = await _tagRepository.getOrCreateTagType(typeName);
+
+          // Get or create tag
+          final int tagId = await _tagRepository.getOrCreateTag(tagName, typeId: typeId);
+
+          // Update tag type if it is currently 'default' but backup specifies a custom type
+          final allTags = await _tagRepository.getAllTags();
+          final existingTag = allTags.firstWhere((t) => t.id == tagId);
+          if (existingTag.typeId == 1 && typeId != 1) {
+            await _tagRepository.updateTag(existingTag.copyWith(typeId: typeId));
+          }
+
+          // Add mapping if not exists
+          if (!currentTagNames.contains(tagName.toLowerCase())) {
+            await _tagRepository.addTagToVideo(matchedVideo.id!, tagId);
+            tagsAppliedCount++;
+          }
+        }
+      }
+    }
+
+    return {
+      'totalInBackup': backupVideos.length,
+      'matchedVideos': matchedCount,
+      'tagsApplied': tagsAppliedCount,
+    };
+  }
+
 
   String _formatDuration(double durationMs) {
     final int totalSeconds = (durationMs / 1000).floor();

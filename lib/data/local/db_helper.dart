@@ -19,8 +19,11 @@ class DatabaseHelper {
     String path = join(await getDatabasesPath(), 'tooby.db');
     return await openDatabase(
       path,
-      version: 1,
-      onCreate: _onCreate,
+      version: 2,
+      onCreate: (db, version) async {
+        await _onCreate(db, version);
+      },
+      onUpgrade: _onUpgrade,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -39,9 +42,17 @@ class DatabaseHelper {
     ''');
 
     await db.execute('''
-      CREATE TABLE tags(
+      CREATE TABLE tag_types(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE tags(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE,
+        type_id INTEGER DEFAULT 1 REFERENCES tag_types(id) ON DELETE SET DEFAULT
       )
     ''');
 
@@ -63,6 +74,27 @@ class DatabaseHelper {
         FOREIGN KEY (video_id) REFERENCES videos (id) ON DELETE CASCADE
       )
     ''');
+
+    // Insert default tag type
+    await db.insert('tag_types', {'name': 'default'});
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // 1. Create tag_types table
+      await db.execute('''
+        CREATE TABLE tag_types(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT UNIQUE
+        )
+      ''');
+
+      // 2. Insert default tag type (receives ID 1)
+      await db.insert('tag_types', {'name': 'default'});
+
+      // 3. Alter tags table to add type_id column
+      await db.execute('ALTER TABLE tags ADD COLUMN type_id INTEGER DEFAULT 1 REFERENCES tag_types(id) ON DELETE SET DEFAULT');
+    }
   }
 
   // Generic methods

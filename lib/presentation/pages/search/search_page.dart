@@ -138,6 +138,20 @@ class SearchPage extends ConsumerWidget {
   }
 }
 
+abstract class FilterItem {}
+
+class HeaderFilterItem extends FilterItem {
+  final String title;
+  HeaderFilterItem(this.title);
+}
+
+class TagFilterItem extends FilterItem {
+  final int id;
+  final String name;
+  final int videoCount;
+  TagFilterItem(this.id, this.name, this.videoCount);
+}
+
 class TagFilterSheet extends ConsumerWidget {
   const TagFilterSheet({super.key});
 
@@ -184,24 +198,70 @@ class TagFilterSheet extends ConsumerWidget {
                     child: Text("No tags found"),
                   );
                 }
+
+                // Group tags by type name
+                final Map<String, List<Map<String, dynamic>>> grouped = {};
+                for (var tag in tags) {
+                  final typeName = (tag['type_name'] ?? 'default').toString().toUpperCase();
+                  grouped.putIfAbsent(typeName, () => []).add(tag);
+                }
+
+                // Flatten into a list of FilterItem
+                final List<FilterItem> items = [];
+                final sortedTypes = grouped.keys.toList()
+                  ..sort((a, b) {
+                    if (a == 'DEFAULT') return -1;
+                    if (b == 'DEFAULT') return 1;
+                    return a.compareTo(b);
+                  });
+
+                for (var type in sortedTypes) {
+                  items.add(HeaderFilterItem(type));
+                  for (var tag in grouped[type]!) {
+                    items.add(TagFilterItem(
+                      tag['id'] as int,
+                      tag['name'] as String,
+                      tag['video_count'] as int,
+                    ));
+                  }
+                }
+
                 return ListView.builder(
                   shrinkWrap: true,
-                  itemCount: tags.length,
+                  itemCount: items.length,
                   itemBuilder: (context, index) {
-                    final tag = tags[index];
-                    final int id = tag['id'];
-                    final bool isSelected = selectedIds.contains(id);
+                    final item = items[index];
+
+                    if (item is HeaderFilterItem) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 16.0, bottom: 8.0, left: 12.0),
+                        child: Text(
+                          item.title,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      );
+                    }
+
+                    final tag = item as TagFilterItem;
+                    final bool isSelected = selectedIds.contains(tag.id);
 
                     return CheckboxListTile(
-                      title: Text(tag['name']),
-                      subtitle: Text("${tag['video_count']} videos"),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                      title: Text(tag.name),
+                      subtitle: Text("${tag.videoCount} videos"),
                       value: isSelected,
                       activeColor: AppColors.primary,
                       onChanged: (bool? checked) {
                         if (checked == true) {
-                          ref.read(selectedTagIdsProvider.notifier).state = [...selectedIds, id];
+                          ref.read(selectedTagIdsProvider.notifier).state = [...selectedIds, tag.id];
                         } else {
-                          ref.read(selectedTagIdsProvider.notifier).state = selectedIds.where((val) => val != id).toList();
+                          ref.read(selectedTagIdsProvider.notifier).state =
+                              selectedIds.where((val) => val != tag.id).toList();
                         }
                       },
                     );

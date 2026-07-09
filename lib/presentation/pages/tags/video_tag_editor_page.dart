@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../providers/video_provider.dart';
+import '../../../data/models/tag_model.dart';
 
 class VideoTagEditorPage extends ConsumerStatefulWidget {
   final int videoId;
@@ -18,6 +19,16 @@ class VideoTagEditorPage extends ConsumerStatefulWidget {
 }
 
 class _VideoTagEditorPageState extends ConsumerState<VideoTagEditorPage> {
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final allTagsAsync = ref.watch(allTagsProvider);
@@ -26,7 +37,42 @@ class _VideoTagEditorPageState extends ConsumerState<VideoTagEditorPage> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Edit Tags', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: _isSearching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Search tags...',
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(color: Colors.white70),
+                ),
+                style: const TextStyle(color: Colors.white, fontSize: 18),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value.trim().toLowerCase();
+                  });
+                },
+              )
+            : const Text('Edit Tags', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: Icon(_isSearching ? Icons.close : Icons.search),
+            onPressed: () {
+              setState(() {
+                if (_isSearching) {
+                  if (_searchController.text.isNotEmpty) {
+                    _searchController.clear();
+                    _searchQuery = '';
+                  } else {
+                    _isSearching = false;
+                  }
+                } else {
+                  _isSearching = true;
+                }
+              });
+            },
+          ),
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -46,10 +92,31 @@ class _VideoTagEditorPageState extends ConsumerState<VideoTagEditorPage> {
               data: (allTags) => videoTagsAsync.when(
                 data: (videoTags) {
                   final videoTagIds = videoTags.map((t) => t.id).toSet();
+                  
+                  // Sort tags alphabetically (case-insensitive)
+                  final sortedTags = List<TagModel>.from(allTags);
+                  sortedTags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+                  // Filter tags by search query
+                  final filteredTags = _searchQuery.isEmpty
+                      ? sortedTags
+                      : sortedTags.where((t) => t.name.toLowerCase().contains(_searchQuery)).toList();
+
+                  if (filteredTags.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _searchQuery.isEmpty ? "No tags available" : "No tags match your search",
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              color: AppColors.outline,
+                            ),
+                      ),
+                    );
+                  }
+
                   return ListView.builder(
-                    itemCount: allTags.length,
+                    itemCount: filteredTags.length,
                     itemBuilder: (context, index) {
-                      final tag = allTags[index];
+                      final tag = filteredTags[index];
                       final isSelected = videoTagIds.contains(tag.id);
                       return CheckboxListTile(
                         title: Text(tag.name),
