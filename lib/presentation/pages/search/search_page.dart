@@ -5,287 +5,329 @@ import '../../../data/models/video_model.dart';
 import '../../widgets/common_widgets.dart';
 import '../../../providers/video_provider.dart';
 
-final searchQueryProvider = StateProvider.autoDispose<String>((ref) => "");
-final selectedTagIdsProvider = StateProvider.autoDispose<List<int>>((ref) => []);
+final includedTagIdsProvider = StateProvider.autoDispose<List<int>>((ref) => []);
+final excludedTagIdsProvider = StateProvider.autoDispose<List<int>>((ref) => []);
+final includedTypeIdsProvider = StateProvider.autoDispose<List<int>>((ref) => []);
+final excludedTypeIdsProvider = StateProvider.autoDispose<List<int>>((ref) => []);
 final matchAllTagsProvider = StateProvider.autoDispose<bool>((ref) => false);
 
 final searchResultsProvider = FutureProvider.autoDispose<List<VideoModel>>((ref) async {
-  final query = ref.watch(searchQueryProvider);
-  final tagIds = ref.watch(selectedTagIdsProvider);
+  final includedTags = ref.watch(includedTagIdsProvider);
+  final excludedTags = ref.watch(excludedTagIdsProvider);
+  final includedTypes = ref.watch(includedTypeIdsProvider);
+  final excludedTypes = ref.watch(excludedTypeIdsProvider);
   final matchAll = ref.watch(matchAllTagsProvider);
-  
-  if (query.isEmpty && tagIds.isEmpty) return [];
-  
+
   final repo = ref.watch(videoRepositoryProvider);
-  return await repo.searchVideos(query, tagIds, matchAllTags: matchAll);
+  return await repo.searchVideos(
+    query: '',
+    includedTagIds: includedTags,
+    excludedTagIds: excludedTags,
+    includedTypeIds: includedTypes,
+    excludedTypeIds: excludedTypes,
+    matchAllTags: matchAll,
+  );
 });
 
-class SearchPage extends ConsumerWidget {
+class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final searchResultsAsync = ref.watch(searchResultsProvider);
-    final selectedTags = ref.watch(selectedTagIdsProvider);
+  ConsumerState<SearchPage> createState() => _SearchPageState();
+}
 
+class _SearchPageState extends ConsumerState<SearchPage> {
+  bool _filtersExpanded = true;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: TextField(
-          autofocus: true,
-          style: const TextStyle(color: AppColors.onSurface),
-          decoration: const InputDecoration(
-            hintText: 'Search films or creators...',
-            border: InputBorder.none,
-            hintStyle: TextStyle(color: AppColors.onSurfaceVariant),
-          ),
-          onChanged: (value) {
-            ref.read(searchQueryProvider.notifier).state = value;
-          },
-        ),
+        title: const Text('Filter Videos', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.tune, color: AppColors.primary),
-                onPressed: () => _showFilterSheet(context, ref),
-                tooltip: 'Filter by tags',
-              ),
-              if (selectedTags.isNotEmpty)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                    child: Text(
-                      '${selectedTags.length}',
-                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
+          IconButton(
+            icon: Icon(_filtersExpanded ? Icons.expand_less : Icons.expand_more, color: AppColors.primary),
+            onPressed: () {
+              setState(() {
+                _filtersExpanded = !_filtersExpanded;
+              });
+            },
+            tooltip: _filtersExpanded ? 'Collapse Filters' : 'Expand Filters',
+          ),
+          IconButton(
+            icon: const Icon(Icons.clear_all, color: AppColors.primary),
+            onPressed: () {
+              ref.read(includedTagIdsProvider.notifier).state = [];
+              ref.read(excludedTagIdsProvider.notifier).state = [];
+              ref.read(includedTypeIdsProvider.notifier).state = [];
+              ref.read(excludedTypeIdsProvider.notifier).state = [];
+              ref.read(matchAllTagsProvider.notifier).state = false;
+            },
+            tooltip: 'Clear All Filters',
           ),
         ],
       ),
-      body: searchResultsAsync.when(
-        data: (videos) {
-          final query = ref.read(searchQueryProvider);
-          if (videos.isEmpty) {
-            if (query.isEmpty && selectedTags.isEmpty) {
-              return const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.search, size: 64, color: AppColors.outline),
-                    SizedBox(height: 16),
-                    Text("Search by title or filter by tags", style: TextStyle(color: AppColors.onSurfaceVariant)),
-                  ],
-                ),
-              );
-            }
-            return Center(
-              child: Text(
-                "No results found",
-                style: const TextStyle(color: AppColors.onSurfaceVariant),
-              ),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: videos.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 16),
-            itemBuilder: (context, index) {
-              final v = videos[index];
-              return VideoCard(
-                title: v.title,
-                thumbnail: v.thumbnail,
-                duration: v.duration,
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    '/player',
-                    arguments: {'videoId': v.id!},
-                  );
-                },
-              );
-            },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text("Error: $err")),
-      ),
-    );
-  }
-
-  void _showFilterSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return const TagFilterSheet();
-      },
-    );
-  }
-}
-
-abstract class FilterItem {}
-
-class HeaderFilterItem extends FilterItem {
-  final String title;
-  HeaderFilterItem(this.title);
-}
-
-class TagFilterItem extends FilterItem {
-  final int id;
-  final String name;
-  final int videoCount;
-  TagFilterItem(this.id, this.name, this.videoCount);
-}
-
-class TagFilterSheet extends ConsumerWidget {
-  const TagFilterSheet({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tagsAsync = ref.watch(allTagsWithCountProvider);
-    final selectedIds = ref.watch(selectedTagIdsProvider);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      body: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text("Filter by Tags", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              TextButton(
-                onPressed: () {
-                  ref.read(selectedTagIdsProvider.notifier).state = [];
-                  ref.read(matchAllTagsProvider.notifier).state = false;
-                },
-                child: const Text("Clear All"),
+          if (_filtersExpanded)
+            Container(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppColors.outlineVariant)),
               ),
-            ],
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: _buildFilterPanel(context, ref),
+              ),
+            ),
+          Expanded(
+            child: _buildResultsSection(context, ref),
           ),
-          const Divider(),
-          SwitchListTile(
-            title: const Text("Match all selected tags"),
-            subtitle: const Text("Show videos containing every selected tag"),
-            value: ref.watch(matchAllTagsProvider),
-            activeColor: AppColors.primary,
-            onChanged: (value) {
-              ref.read(matchAllTagsProvider.notifier).state = value;
-            },
-          ),
-          const Divider(),
-          Flexible(
-            child: tagsAsync.when(
-              data: (tags) {
-                if (tags.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 32.0),
-                    child: Text("No tags found"),
-                  );
-                }
+        ],
+      ),
+    );
+  }
 
-                // Group tags by type name
-                final Map<String, List<Map<String, dynamic>>> grouped = {};
-                for (var tag in tags) {
-                  final typeName = (tag['type_name'] ?? 'default').toString().toUpperCase();
-                  grouped.putIfAbsent(typeName, () => []).add(tag);
-                }
+  Widget _buildFilterPanel(BuildContext context, WidgetRef ref) {
+    final tagsAsync = ref.watch(allTagsWithCountProvider);
+    final tagTypesAsync = ref.watch(allTagTypesProvider);
 
-                // Flatten into a list of FilterItem
-                final List<FilterItem> items = [];
-                final sortedTypes = grouped.keys.toList()
-                  ..sort((a, b) {
-                    if (a == 'DEFAULT') return -1;
-                    if (b == 'DEFAULT') return 1;
-                    return a.compareTo(b);
-                  });
+    final includedTags = ref.watch(includedTagIdsProvider);
+    final excludedTags = ref.watch(excludedTagIdsProvider);
+    final includedTypes = ref.watch(includedTypeIdsProvider);
+    final excludedTypes = ref.watch(excludedTypeIdsProvider);
 
-                for (var type in sortedTypes) {
-                  items.add(HeaderFilterItem(type));
-                  for (var tag in grouped[type]!) {
-                    items.add(TagFilterItem(
-                      tag['id'] as int,
-                      tag['name'] as String,
-                      tag['video_count'] as int,
-                    ));
-                  }
-                }
+    return tagTypesAsync.when(
+      data: (types) => tagsAsync.when(
+        data: (tags) {
+          if (types.isEmpty) {
+            return const Center(child: Text("No tag types found."));
+          }
 
-                return ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
+          // Group tags by typeId
+          final Map<int, List<Map<String, dynamic>>> groupedTags = {};
+          for (var type in types) {
+            groupedTags[type.id!] = [];
+          }
+          for (var tag in tags) {
+            final typeId = tag['type_id'] ?? 1;
+            if (groupedTags.containsKey(typeId)) {
+              groupedTags[typeId]!.add(tag);
+            } else {
+              groupedTags[1]?.add(tag);
+            }
+          }
 
-                    if (item is HeaderFilterItem) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 16.0, bottom: 8.0, left: 12.0),
-                        child: Text(
-                          item.title,
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Match All Switch
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Match all selected tags", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                  Switch(
+                    value: ref.watch(matchAllTagsProvider),
+                    activeThumbColor: AppColors.primary,
+                    onChanged: (val) {
+                      ref.read(matchAllTagsProvider.notifier).state = val;
+                    },
+                  ),
+                ],
+              ),
+              const Divider(color: AppColors.outlineVariant, height: 16),
+              ...types.map((type) {
+                final typeId = type.id!;
+                final typeTags = groupedTags[typeId] ?? [];
+
+                final bool isTypeIncluded = includedTypes.contains(typeId);
+                final bool isTypeExcluded = excludedTypes.contains(typeId);
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          type.name.toUpperCase(),
                           style: const TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: AppColors.primary,
-                            letterSpacing: 1.1,
+                            letterSpacing: 1.2,
                           ),
                         ),
-                      );
-                    }
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                isTypeIncluded ? Icons.check_circle : Icons.check_circle_outline,
+                                color: isTypeIncluded ? Colors.green : AppColors.outline,
+                                size: 18,
+                              ),
+                              onPressed: () {
+                                if (isTypeIncluded) {
+                                  ref.read(includedTypeIdsProvider.notifier).update(
+                                      (state) => state.where((id) => id != typeId).toList());
+                                } else {
+                                  ref.read(includedTypeIdsProvider.notifier).update((state) => [...state, typeId]);
+                                  ref.read(excludedTypeIdsProvider.notifier).update(
+                                      (state) => state.where((id) => id != typeId).toList());
+                                }
+                              },
+                              tooltip: 'Require this type',
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                isTypeExcluded ? Icons.remove_circle : Icons.remove_circle_outline,
+                                color: isTypeExcluded ? Colors.red : AppColors.outline,
+                                size: 18,
+                              ),
+                              onPressed: () {
+                                if (isTypeExcluded) {
+                                  ref.read(excludedTypeIdsProvider.notifier).update(
+                                      (state) => state.where((id) => id != typeId).toList());
+                                } else {
+                                  ref.read(excludedTypeIdsProvider.notifier).update((state) => [...state, typeId]);
+                                  ref.read(includedTypeIdsProvider.notifier).update(
+                                      (state) => state.where((id) => id != typeId).toList());
+                                }
+                              },
+                              tooltip: 'Exclude this type',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    if (typeTags.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text("No tags in this type", style: TextStyle(fontSize: 12, color: AppColors.outline)),
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: typeTags.map((tag) {
+                          final tagId = tag['id'] as int;
+                          final bool isTagIncluded = includedTags.contains(tagId);
+                          final bool isTagExcluded = excludedTags.contains(tagId);
 
-                    final tag = item as TagFilterItem;
-                    final bool isSelected = selectedIds.contains(tag.id);
+                          Color chipBg;
+                          Widget? avatar;
+                          if (isTagIncluded) {
+                            chipBg = Colors.green.withValues(alpha: 0.15);
+                            avatar = const Icon(Icons.check_circle, color: Colors.green, size: 14);
+                          } else if (isTagExcluded) {
+                            chipBg = Colors.red.withValues(alpha: 0.15);
+                            avatar = const Icon(Icons.cancel, color: Colors.red, size: 14);
+                          } else {
+                            chipBg = AppColors.surfaceContainerHigh;
+                            avatar = null;
+                          }
 
-                    return CheckboxListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                      title: Text(tag.name),
-                      subtitle: Text("${tag.videoCount} videos"),
-                      value: isSelected,
-                      activeColor: AppColors.primary,
-                      onChanged: (bool? checked) {
-                        if (checked == true) {
-                          ref.read(selectedTagIdsProvider.notifier).state = [...selectedIds, tag.id];
-                        } else {
-                          ref.read(selectedTagIdsProvider.notifier).state =
-                              selectedIds.where((val) => val != tag.id).toList();
-                        }
-                      },
-                    );
-                  },
+                          void toggleState() {
+                            if (!isTagIncluded && !isTagExcluded) {
+                              ref.read(includedTagIdsProvider.notifier).update((state) => [...state, tagId]);
+                            } else if (isTagIncluded) {
+                              ref.read(includedTagIdsProvider.notifier).update(
+                                  (state) => state.where((id) => id != tagId).toList());
+                              ref.read(excludedTagIdsProvider.notifier).update((state) => [...state, tagId]);
+                            } else {
+                              ref.read(excludedTagIdsProvider.notifier).update(
+                                  (state) => state.where((id) => id != tagId).toList());
+                            }
+                          }
+
+                          return GestureDetector(
+                            onTap: toggleState,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: chipBg,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isTagIncluded 
+                                      ? Colors.green 
+                                      : (isTagExcluded ? Colors.red : AppColors.outlineVariant),
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (avatar != null) ...[
+                                    avatar,
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Text(
+                                    "${tag['name']} (${tag['video_count']})",
+                                    style: TextStyle(
+                                      color: isTagIncluded 
+                                          ? Colors.green 
+                                          : (isTagExcluded ? Colors.red : AppColors.onSurface),
+                                      fontWeight: (isTagIncluded || isTagExcluded) ? FontWeight.bold : FontWeight.normal,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    const SizedBox(height: 16),
+                  ],
+                );
+              }),
+            ],
+          );
+        },
+        loading: () => const SizedBox.shrink(),
+        error: (err, _) => Center(child: Text("Error: $err")),
+      ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Center(child: Text("Error: $err")),
+    );
+  }
+
+  Widget _buildResultsSection(BuildContext context, WidgetRef ref) {
+    final searchResultsAsync = ref.watch(searchResultsProvider);
+
+    return searchResultsAsync.when(
+      data: (videos) {
+        if (videos.isEmpty) {
+          return const Center(
+            child: Text("No videos match selected filters", style: TextStyle(color: AppColors.onSurfaceVariant)),
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: videos.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 16),
+          itemBuilder: (context, index) {
+            final v = videos[index];
+            return VideoCard(
+              title: v.title,
+              thumbnail: v.thumbnail,
+              duration: v.duration,
+              onTap: () {
+                Navigator.pushNamed(
+                  context,
+                  '/player',
+                  arguments: {'videoId': v.id!},
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const Text("Error loading tags"),
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.onPrimary,
-              ),
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Apply Details"),
-            ),
-          ),
-        ],
-      ),
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Center(child: Text("Error loading results: $err")),
     );
   }
 }

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../data/models/video_model.dart';
 import '../../../providers/video_provider.dart';
 import '../../widgets/common_widgets.dart';
-
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final randomTagTypeVideosAsync = ref.watch(randomTagTypeVideosProvider);
     final continueWatchingAsync = ref.watch(continueWatchingProvider);
     final recentVideosAsync = ref.watch(recentVideosProvider);
 
@@ -42,6 +43,52 @@ class HomePage extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Random TagType Section
+            randomTagTypeVideosAsync.when(
+              data: (data) {
+                if (data == null) return const SizedBox.shrink();
+                final String typeName = data['typeName'];
+                final List<VideoModel> videos = data['videos'] as List<VideoModel>;
+                if (videos.isEmpty) return const SizedBox.shrink();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSection(
+                      context,
+                      typeName.toUpperCase(),
+                      SizedBox(
+                        height: 240,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: videos.length,
+                          itemBuilder: (context, index) {
+                            final v = videos[index];
+                            return VideoCard(
+                              title: v.title,
+                              thumbnail: v.thumbnail,
+                              duration: v.duration,
+                              isHorizontal: true,
+                              onTap: () => _navigateToPlayer(context, v.id!),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
+                );
+              },
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24.0),
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+
             // Continue Watching
             _buildSection(
               context,
@@ -70,6 +117,7 @@ class HomePage extends ConsumerWidget {
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (_, __) => const SizedBox.shrink(),
               ),
+              onViewAll: () {},
             ),
             
             const SizedBox(height: 32),
@@ -105,6 +153,7 @@ class HomePage extends ConsumerWidget {
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (_, __) => const SizedBox.shrink(),
               ),
+              onViewAll: () {},
             ),
           ],
         ),
@@ -112,7 +161,12 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  Widget _buildSection(BuildContext context, String title, Widget content) {
+  Widget _buildSection(
+    BuildContext context,
+    String title,
+    Widget content, {
+    VoidCallback? onViewAll,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -125,10 +179,11 @@ class HomePage extends ConsumerWidget {
                 title,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
               ),
-              TextButton(
-                onPressed: () {},
-                child: const Text("View all", style: TextStyle(color: AppColors.primary)),
-              ),
+              if (onViewAll != null)
+                TextButton(
+                  onPressed: onViewAll,
+                  child: const Text("View all", style: TextStyle(color: AppColors.primary)),
+                ),
             ],
           ),
         ),

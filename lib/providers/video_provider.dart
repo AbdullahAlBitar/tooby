@@ -68,3 +68,8 @@ final videosForTagProvider = FutureProvider.family<List<VideoModel>, int>((ref, 
   final repo = ref.watch(tagRepositoryProvider);
   return await repo.getVideosForTag(tagId);
 });
+
+final randomTagTypeVideosProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final repo = ref.watch(tagRepositoryProvider);
+  return await repo.getRandomTagTypeWithVideos();
+});

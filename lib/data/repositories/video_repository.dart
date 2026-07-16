@@ -77,38 +77,89 @@ class VideoRepository {
     await _dbHelper.rawDelete('DELETE FROM watch_history', []);
   }
 
-  Future<List<VideoModel>> searchVideos(String query, List<int> tagIds, {bool matchAllTags = false}) async {
-    String sql = 'SELECT v.*, COUNT(vt.tag_id) as match_count FROM videos v';
+  Future<List<VideoModel>> searchVideos({
+    required String query,
+    required List<int> includedTagIds,
+    required List<int> excludedTagIds,
+    required List<int> includedTypeIds,
+    required List<int> excludedTypeIds,
+    bool matchAllTags = false,
+  }) async {
+    List<String> conditions = [];
     List<dynamic> args = [];
 
-    if (tagIds.isNotEmpty) {
-      sql += ' LEFT JOIN video_tags vt ON v.id = vt.video_id AND vt.tag_id IN (${List.filled(tagIds.length, '?').join(',')})';
-      args.addAll(tagIds);
-    } else {
-      sql += ' LEFT JOIN video_tags vt ON v.id = vt.video_id';
+    // Title search
+    if (query.isNotEmpty) {
+      conditions.add('v.title LIKE ?');
+      args.add('%$query%');
     }
 
-    sql += ' GROUP BY v.id';
+    // Excluded tag IDs
+    if (excludedTagIds.isNotEmpty) {
+      final placeholders = List.filled(excludedTagIds.length, '?').join(',');
+      conditions.add('''
+        NOT EXISTS (
+          SELECT 1 FROM video_tags vt 
+          WHERE vt.video_id = v.id AND vt.tag_id IN ($placeholders)
+        )
+      ''');
+      args.addAll(excludedTagIds);
+    }
 
-    final tagCount = tagIds.length;
-    final tagCondition = matchAllTags ? 'match_count = ?' : 'match_count > 0';
-
-    if (tagIds.isNotEmpty || query.isNotEmpty) {
-      sql += ' HAVING ';
-      if (tagIds.isNotEmpty && query.isNotEmpty) {
-        sql += '($tagCondition OR v.title LIKE ?)';
-        if (matchAllTags) args.add(tagCount);
-        args.add('%$query%');
-      } else if (tagIds.isNotEmpty) {
-        sql += tagCondition;
-        if (matchAllTags) args.add(tagCount);
-      } else if (query.isNotEmpty) {
-        sql += 'v.title LIKE ?';
-        args.add('%$query%');
+    // Included tag IDs
+    if (includedTagIds.isNotEmpty) {
+      final placeholders = List.filled(includedTagIds.length, '?').join(',');
+      if (matchAllTags) {
+        conditions.add('''
+          (
+            SELECT COUNT(DISTINCT vt.tag_id) FROM video_tags vt 
+            WHERE vt.video_id = v.id AND vt.tag_id IN ($placeholders)
+          ) = ?
+        ''');
+        args.addAll(includedTagIds);
+        args.add(includedTagIds.length);
+      } else {
+        conditions.add('''
+          EXISTS (
+            SELECT 1 FROM video_tags vt 
+            WHERE vt.video_id = v.id AND vt.tag_id IN ($placeholders)
+          )
+        ''');
+        args.addAll(includedTagIds);
       }
     }
 
-    sql += ' ORDER BY match_count DESC, v.title ASC';
+    // Included tag type IDs
+    if (includedTypeIds.isNotEmpty) {
+      final placeholders = List.filled(includedTypeIds.length, '?').join(',');
+      conditions.add('''
+        EXISTS (
+          SELECT 1 FROM video_tags vt 
+          JOIN tags t ON vt.tag_id = t.id 
+          WHERE vt.video_id = v.id AND t.type_id IN ($placeholders)
+        )
+      ''');
+      args.addAll(includedTypeIds);
+    }
+
+    // Excluded tag type IDs
+    if (excludedTypeIds.isNotEmpty) {
+      final placeholders = List.filled(excludedTypeIds.length, '?').join(',');
+      conditions.add('''
+        NOT EXISTS (
+          SELECT 1 FROM video_tags vt 
+          JOIN tags t ON vt.tag_id = t.id 
+          WHERE vt.video_id = v.id AND t.type_id IN ($placeholders)
+        )
+      ''');
+      args.addAll(excludedTypeIds);
+    }
+
+    String sql = 'SELECT v.* FROM videos v';
+    if (conditions.isNotEmpty) {
+      sql += ' WHERE ${conditions.join(' AND ')}';
+    }
+    sql += ' ORDER BY v.title ASC';
 
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery(sql, args);
     return List.generate(maps.length, (i) => VideoModel.fromMap(maps[i]));

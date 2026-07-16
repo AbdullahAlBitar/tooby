@@ -21,7 +21,20 @@ class LibraryPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Library', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Library', style: TextStyle(fontWeight: FontWeight.bold)),
+            allVideosAsync.when(
+              data: (videos) => Text(
+                '${videos.length} videos',
+                style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+              ),
+              loading: () => const Text('Loading...', style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant)),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: Icon(

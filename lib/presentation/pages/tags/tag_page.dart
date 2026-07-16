@@ -95,7 +95,27 @@ class TagPage extends ConsumerWidget {
                           final tag = typeTags[idx];
                           return ListTile(
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                            title: Text(tag.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                             title: Row(
+                              children: [
+                                Text(tag.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceContainerHigh,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${tag.videoCount ?? 0}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.outline,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [

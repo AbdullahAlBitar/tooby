@@ -39,9 +39,11 @@ class TagRepository {
   // Tags CRUD
   Future<List<TagModel>> getAllTags() async {
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery('''
-      SELECT t.*, ty.name as type_name
+      SELECT t.*, ty.name as type_name, COUNT(vt.video_id) as video_count
       FROM tags t
       LEFT JOIN tag_types ty ON t.type_id = ty.id
+      LEFT JOIN video_tags vt ON t.id = vt.tag_id
+      GROUP BY t.id
     ''', []);
     return List.generate(maps.length, (i) => TagModel.fromMap(maps[i]));
   }
@@ -109,7 +111,8 @@ class TagRepository {
 
   Future<List<TagModel>> getTagsForVideo(int videoId) async {
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery('''
-      SELECT t.*, ty.name as type_name 
+      SELECT t.*, ty.name as type_name,
+             (SELECT COUNT(*) FROM video_tags WHERE tag_id = t.id) as video_count
       FROM tags t
       LEFT JOIN tag_types ty ON t.type_id = ty.id
       JOIN video_tags vt ON t.id = vt.tag_id
@@ -146,5 +149,41 @@ class TagRepository {
     ''', [videoId, videoId]);
     
     return List.generate(maps.length, (i) => VideoModel.fromMap(maps[i]));
+  }
+
+  Future<Map<String, dynamic>?> getRandomTagTypeWithVideos() async {
+    // Select tag_types that have at least one tag linked to at least one video
+    final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery('''
+      SELECT ty.* 
+      FROM tag_types ty
+      JOIN tags t ON ty.id = t.type_id
+      JOIN video_tags vt ON t.id = vt.tag_id
+      GROUP BY ty.id
+      ORDER BY RANDOM()
+      LIMIT 1
+    ''', []);
+    if (maps.isNotEmpty) {
+      final typeId = maps.first['id'] as int;
+      final typeName = maps.first['name'] as String;
+
+      // Fetch all videos under this tag type
+      final List<Map<String, dynamic>> videoMaps = await _dbHelper.rawQuery('''
+        SELECT DISTINCT v.* 
+        FROM videos v
+        JOIN video_tags vt ON v.id = vt.video_id
+        JOIN tags t ON vt.tag_id = t.id
+        WHERE t.type_id = ?
+        ORDER BY RANDOM()
+        LIMIT 10
+      ''', [typeId]);
+      
+      final List<VideoModel> videos = List.generate(videoMaps.length, (i) => VideoModel.fromMap(videoMaps[i]));
+      return {
+        'typeId': typeId,
+        'typeName': typeName,
+        'videos': videos,
+      };
+    }
+    return null;
   }
 }
