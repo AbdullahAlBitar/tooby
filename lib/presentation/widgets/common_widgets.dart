@@ -2,67 +2,76 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 
-class VideoCard extends StatelessWidget {
+import 'video_preview_widget.dart';
+
+class VideoCard extends StatefulWidget {
   final String title;
   final String? thumbnail;
   final String? duration;
+  final String? videoPath;
   final VoidCallback onTap;
-  final bool isHorizontal;
 
   const VideoCard({
     super.key,
     required this.title,
     this.thumbnail,
     this.duration,
+    this.videoPath,
     required this.onTap,
-    this.isHorizontal = false,
   });
 
   @override
-  Widget build(BuildContext context) {
-    if (isHorizontal) {
-      return InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: 260,
-          margin: const EdgeInsets.only(right: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildThumbnail(aspectRatio: 16 / 9),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              if (duration != null)
-                Text(
-                  duration!,
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-            ],
-          ),
-        ),
-      );
-    }
+  State<VideoCard> createState() => _VideoCardState();
+}
 
+class _VideoCardState extends State<VideoCard> {
+  bool _isPreviewing = false;
+
+  void _togglePreview() {
+    if (widget.videoPath == null) return;
+    setState(() {
+      _isPreviewing = !_isPreviewing;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        if (_isPreviewing) {
+          setState(() => _isPreviewing = false);
+        }
+        widget.onTap();
+      },
+      onLongPress: _togglePreview,
       borderRadius: BorderRadius.circular(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildThumbnail(),
+          _isPreviewing && widget.videoPath != null
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: VideoPreviewWidget(videoPath: widget.videoPath!),
+                )
+              : _buildThumbnail(aspectRatio: 16 / 9),
           const SizedBox(height: 8),
-          Text(
-            title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: Text(
+              widget.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
           ),
+          if (widget.duration != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+              child: Text(
+                widget.duration!,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.onSurfaceVariant),
+              ),
+            ),
         ],
       ),
     );
@@ -77,18 +86,18 @@ class VideoCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(12),
-              image: thumbnail != null
+              image: widget.thumbnail != null
                   ? DecorationImage(
-                      image: FileImage(File(thumbnail!)),
+                      image: FileImage(File(widget.thumbnail!)),
                       fit: BoxFit.cover,
                     )
                   : null,
             ),
-            child: thumbnail == null
+            child: widget.thumbnail == null
                 ? const Center(child: Icon(Icons.video_library, color: AppColors.outline, size: 48))
                 : null,
           ),
-          if (duration != null)
+          if (widget.duration != null)
             Positioned(
               right: 8,
               bottom: 8,
@@ -99,7 +108,7 @@ class VideoCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  duration!,
+                  widget.duration!,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,

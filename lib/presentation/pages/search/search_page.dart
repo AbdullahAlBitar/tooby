@@ -68,23 +68,52 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_filtersExpanded)
-            Container(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppColors.outlineVariant)),
+      body: OrientationBuilder(
+        builder: (context, orientation) {
+          if (orientation == Orientation.landscape) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_filtersExpanded)
+                  Expanded(
+                    flex: 1,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        border: Border(right: BorderSide(color: AppColors.outlineVariant)),
+                      ),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: _buildFilterPanel(context, ref),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  flex: 2,
+                  child: _buildResultsSection(context, ref),
+                ),
+              ],
+            );
+          }
+          
+          return Column(
+            children: [
+              if (_filtersExpanded)
+                Container(
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: AppColors.outlineVariant)),
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: _buildFilterPanel(context, ref),
+                  ),
+                ),
+              Expanded(
+                child: _buildResultsSection(context, ref),
               ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: _buildFilterPanel(context, ref),
-              ),
-            ),
-          Expanded(
-            child: _buildResultsSection(context, ref),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -305,16 +334,22 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             child: Text("No videos match selected filters", style: TextStyle(color: AppColors.onSurfaceVariant)),
           );
         }
-        return ListView.separated(
+        return GridView.builder(
           padding: const EdgeInsets.all(16),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 300,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 24,
+            childAspectRatio: 1.05,
+          ),
           itemCount: videos.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 16),
           itemBuilder: (context, index) {
             final v = videos[index];
             return VideoCard(
               title: v.title,
               thumbnail: v.thumbnail,
               duration: v.duration,
+              videoPath: v.path,
               onTap: () {
                 Navigator.pushNamed(
                   context,

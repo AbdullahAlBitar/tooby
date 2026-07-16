@@ -134,7 +134,7 @@ class LibraryPage extends ConsumerWidget {
               crossAxisCount: 2,
               crossAxisSpacing: 16,
               mainAxisSpacing: 24,
-              childAspectRatio: 0.75,
+              childAspectRatio: 1.05,
             ),
             itemCount: videos.length,
             itemBuilder: (context, index) {
@@ -143,6 +143,7 @@ class LibraryPage extends ConsumerWidget {
                 title: v.title,
                 thumbnail: v.thumbnail,
                 duration: v.duration,
+                videoPath: v.path,
                 onTap: () {
                   Navigator.pushNamed(
                     context,

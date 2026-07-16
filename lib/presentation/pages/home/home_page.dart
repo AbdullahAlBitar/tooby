@@ -65,12 +65,16 @@ class HomePage extends ConsumerWidget {
                           itemCount: videos.length,
                           itemBuilder: (context, index) {
                             final v = videos[index];
-                            return VideoCard(
-                              title: v.title,
-                              thumbnail: v.thumbnail,
-                              duration: v.duration,
-                              isHorizontal: true,
-                              onTap: () => _navigateToPlayer(context, v.id!),
+                            return Container(
+                              width: 260,
+                              margin: const EdgeInsets.only(right: 16),
+                              child: VideoCard(
+                                title: v.title,
+                                thumbnail: v.thumbnail,
+                                duration: v.duration,
+                                videoPath: v.path,
+                                onTap: () => _navigateToPlayer(context, v.id!),
+                              ),
                             );
                           },
                         ),
@@ -104,12 +108,16 @@ class HomePage extends ConsumerWidget {
                           itemCount: histories.length,
                           itemBuilder: (context, index) {
                             final h = histories[index];
-                            return VideoCard(
-                              title: h['title'],
-                              thumbnail: h['thumbnail'],
-                              duration: h['duration'],
-                              isHorizontal: true,
-                              onTap: () => _navigateToPlayer(context, h['id']),
+                            return Container(
+                              width: 260,
+                              margin: const EdgeInsets.only(right: 16),
+                              child: VideoCard(
+                                title: h['title'],
+                                thumbnail: h['thumbnail'],
+                                duration: h['duration'],
+                                videoPath: h['path'],
+                                onTap: () => _navigateToPlayer(context, h['id']),
+                              ),
                             );
                           },
                         ),
@@ -140,12 +148,16 @@ class HomePage extends ConsumerWidget {
                           itemCount: videos.length,
                           itemBuilder: (context, index) {
                             final v = videos[index];
-                            return VideoCard(
-                              title: v.title,
-                              thumbnail: v.thumbnail,
-                              duration: v.duration,
-                              isHorizontal: true,
-                              onTap: () => _navigateToPlayer(context, v.id!),
+                            return Container(
+                              width: 260,
+                              margin: const EdgeInsets.only(right: 16),
+                              child: VideoCard(
+                                title: v.title,
+                                thumbnail: v.thumbnail,
+                                duration: v.duration,
+                                videoPath: v.path,
+                                onTap: () => _navigateToPlayer(context, v.id!),
+                              ),
                             );
                           },
                         ),

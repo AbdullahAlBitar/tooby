@@ -68,76 +68,136 @@ class VideoPlayerPage extends ConsumerWidget {
     AsyncValue<List<dynamic>> tagsAsync,
     AsyncValue<List<VideoModel>> recommendationsAsync,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Video Player (Fixed at the top)
-        FutureBuilder(
-          future: ref.read(videoRepositoryProvider).getWatchHistory(videoId),
-          builder: (context, snapshot) {
-            final initialPosition = snapshot.data?.lastPosition ?? Duration.zero;
-            return VideoPlayerWidget(
-              videoId: videoId,
-              videoPath: video.path,
-              initialPosition: initialPosition,
-            );
-          },
-        ),
-        
-        // Scrollable content underneath
-        Expanded(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title
-                  Text(
-                    video.title,
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Tags
-                  Row(
-                    children: [
-                      Expanded(
-                        child: tagsAsync.when(
-                          data: (tags) => Wrap(
-                            spacing: 8,
-                            children: tags.map((t) => TagChip(label: t.name)).toList(),
+    return OrientationBuilder(
+      builder: (context, orientation) {
+        if (orientation == Orientation.landscape) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left half (Video + details)
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    FutureBuilder(
+                      future: ref.read(videoRepositoryProvider).getWatchHistory(videoId),
+                      builder: (context, snapshot) {
+                        final initialPosition = snapshot.data?.lastPosition ?? Duration.zero;
+                        return VideoPlayerWidget(
+                          videoId: videoId,
+                          videoPath: video.path,
+                          initialPosition: initialPosition,
+                        );
+                      },
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(video.title, style: Theme.of(context).textTheme.headlineMedium),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: tagsAsync.when(
+                                      data: (tags) => Wrap(
+                                        spacing: 8,
+                                        children: tags.map((t) => TagChip(label: t.name)).toList(),
+                                      ),
+                                      loading: () => const SizedBox.shrink(),
+                                      error: (_, __) => const SizedBox.shrink(),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: AppColors.primary, size: 20),
+                                    onPressed: () {
+                                      Navigator.pushNamed(context, '/video-tags', arguments: {'videoId': videoId, 'videoTitle': video.title});
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: AppColors.primary, size: 20),
-                        onPressed: () {
-                          Navigator.pushNamed(
-                            context,
-                            '/video-tags',
-                            arguments: {
-                              'videoId': videoId,
-                              'videoTitle': video.title,
+                    ),
+                  ],
+                ),
+              ),
+              // Right half (Recommendations)
+              Expanded(
+                flex: 1,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    border: Border(left: BorderSide(color: AppColors.outlineVariant)),
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16.0),
+                    child: _buildRecommendations(context, recommendationsAsync, ref),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        // Portrait mode
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            FutureBuilder(
+              future: ref.read(videoRepositoryProvider).getWatchHistory(videoId),
+              builder: (context, snapshot) {
+                final initialPosition = snapshot.data?.lastPosition ?? Duration.zero;
+                return VideoPlayerWidget(
+                  videoId: videoId,
+                  videoPath: video.path,
+                  initialPosition: initialPosition,
+                );
+              },
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(video.title, style: Theme.of(context).textTheme.headlineMedium),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: tagsAsync.when(
+                              data: (tags) => Wrap(
+                                spacing: 8,
+                                children: tags.map((t) => TagChip(label: t.name)).toList(),
+                              ),
+                              loading: () => const SizedBox.shrink(),
+                              error: (_, __) => const SizedBox.shrink(),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: AppColors.primary, size: 20),
+                            onPressed: () {
+                              Navigator.pushNamed(context, '/video-tags', arguments: {'videoId': videoId, 'videoTitle': video.title});
                             },
-                          );
-                        },
+                          ),
+                        ],
                       ),
+                      const Divider(color: AppColors.outlineVariant, height: 32),
+                      _buildRecommendations(context, recommendationsAsync, ref),
                     ],
                   ),
-                  
-                  const Divider(color: AppColors.outlineVariant, height: 32),
-                  
-                  // Recommendations
-                  _buildRecommendations(context, recommendationsAsync, ref),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 
