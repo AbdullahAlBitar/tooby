@@ -6,57 +6,87 @@ import '../../../providers/video_provider.dart';
 import '../../widgets/video_player_widget.dart';
 import '../../widgets/common_widgets.dart';
 
-class VideoPlayerPage extends ConsumerWidget {
+class VideoPlayerPage extends ConsumerStatefulWidget {
   final int videoId;
 
   const VideoPlayerPage({super.key, required this.videoId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final videoAsync = ref.watch(videoByIdProvider(videoId));
-    final tagsAsync = ref.watch(tagsForVideoProvider(videoId));
-    final recommendationsAsync = ref.watch(recommendedVideosProvider(videoId));
+  ConsumerState<VideoPlayerPage> createState() => _VideoPlayerPageState();
+}
+
+class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
+  bool _showAppBar = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final videoAsync = ref.watch(videoByIdProvider(widget.videoId));
+    final tagsAsync = ref.watch(tagsForVideoProvider(widget.videoId));
+    final recommendationsAsync = ref.watch(recommendedVideosProvider(widget.videoId));
+
+    final appBar = AppBar(
+      backgroundColor: AppColors.surface.withOpacity(0.9),
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: AppColors.primary),
+        onPressed: () => Navigator.pop(context),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh, color: AppColors.primary),
+          onPressed: () async {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Regenerating thumbnail...")),
+            );
+            await ref.read(videoScannerServiceProvider).regenerateThumbnailById(widget.videoId);
+            ref.invalidate(videoByIdProvider(widget.videoId));
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Thumbnail updated!")),
+              );
+            }
+          },
+          tooltip: 'Refresh Thumbnail',
+        ),
+        IconButton(
+          icon: const Icon(Icons.close, color: AppColors.primary),
+          onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
+          tooltip: 'Close Player',
+        ),
+      ],
+    );
 
     return Scaffold(
       backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.primary),
-          onPressed: () => Navigator.pop(context),
+      body: SafeArea(
+        child: Listener(
+          onPointerMove: (event) {
+            if (event.delta.dy > 10 && !_showAppBar) {
+              setState(() => _showAppBar = true);
+            } else if (event.delta.dy < -10 && _showAppBar) {
+              setState(() => _showAppBar = false);
+            }
+          },
+          child: Stack(
+            children: [
+              videoAsync.when(
+                data: (video) {
+                  if (video == null) return const Center(child: Text("Video not found"));
+                  return _buildContent(context, ref, video, tagsAsync, recommendationsAsync);
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, stack) => Center(child: Text("Error: $err")),
+              ),
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 300),
+                top: _showAppBar ? 0 : -kToolbarHeight - 20,
+                left: 0,
+                right: 0,
+                child: appBar,
+              ),
+            ],
+          ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: AppColors.primary),
-            onPressed: () async {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Regenerating thumbnail...")),
-              );
-              await ref.read(videoScannerServiceProvider).regenerateThumbnailById(videoId);
-              ref.invalidate(videoByIdProvider(videoId));
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Thumbnail updated!")),
-                );
-              }
-            },
-            tooltip: 'Refresh Thumbnail',
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, color: AppColors.primary),
-            onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
-            tooltip: 'Close Player',
-          ),
-        ],
-      ),
-      body: videoAsync.when(
-        data: (video) {
-          if (video == null) return const Center(child: Text("Video not found"));
-          return _buildContent(context, ref, video, tagsAsync, recommendationsAsync);
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text("Error: $err")),
       ),
     );
   }
@@ -80,11 +110,11 @@ class VideoPlayerPage extends ConsumerWidget {
                 child: Column(
                   children: [
                     FutureBuilder(
-                      future: ref.read(videoRepositoryProvider).getWatchHistory(videoId),
+                      future: ref.read(videoRepositoryProvider).getWatchHistory(widget.videoId),
                       builder: (context, snapshot) {
                         final initialPosition = snapshot.data?.lastPosition ?? Duration.zero;
                         return VideoPlayerWidget(
-                          videoId: videoId,
+                          videoId: widget.videoId,
                           videoPath: video.path,
                           initialPosition: initialPosition,
                         );
@@ -114,7 +144,7 @@ class VideoPlayerPage extends ConsumerWidget {
                                   IconButton(
                                     icon: const Icon(Icons.edit, color: AppColors.primary, size: 20),
                                     onPressed: () {
-                                      Navigator.pushNamed(context, '/video-tags', arguments: {'videoId': videoId, 'videoTitle': video.title});
+                                      Navigator.pushNamed(context, '/video-tags', arguments: {'videoId': widget.videoId, 'videoTitle': video.title});
                                     },
                                   ),
                                 ],
@@ -149,11 +179,11 @@ class VideoPlayerPage extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             FutureBuilder(
-              future: ref.read(videoRepositoryProvider).getWatchHistory(videoId),
+              future: ref.read(videoRepositoryProvider).getWatchHistory(widget.videoId),
               builder: (context, snapshot) {
                 final initialPosition = snapshot.data?.lastPosition ?? Duration.zero;
                 return VideoPlayerWidget(
-                  videoId: videoId,
+                  videoId: widget.videoId,
                   videoPath: video.path,
                   initialPosition: initialPosition,
                 );
@@ -183,7 +213,7 @@ class VideoPlayerPage extends ConsumerWidget {
                           IconButton(
                             icon: const Icon(Icons.edit, color: AppColors.primary, size: 20),
                             onPressed: () {
-                              Navigator.pushNamed(context, '/video-tags', arguments: {'videoId': videoId, 'videoTitle': video.title});
+                              Navigator.pushNamed(context, '/video-tags', arguments: {'videoId': widget.videoId, 'videoTitle': video.title});
                             },
                           ),
                         ],
@@ -227,6 +257,7 @@ class VideoPlayerPage extends ConsumerWidget {
                 return VideoCard(
                   title: v.title,
                   thumbnail: v.thumbnail,
+                  videoPath: v.path,
                   onTap: () {
                     // Navigate to same page with new ID (using push to keep history)
                     Navigator.pushNamed(
