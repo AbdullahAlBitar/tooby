@@ -78,6 +78,18 @@ class AppTheme {
         elevation: 0,
         centerTitle: false,
         iconTheme: IconThemeData(color: AppColors.primary),
+        titleTextStyle: TextStyle(
+          color: AppColors.onSurface,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Colors.transparent,
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.onSurfaceVariant,
+        elevation: 0,
+        type: BottomNavigationBarType.fixed,
       ),
       cardTheme: CardThemeData(
         color: AppColors.surfaceContainerHigh,
@@ -93,6 +105,33 @@ class AppTheme {
           borderRadius: BorderRadius.circular(100),
         ),
         side: BorderSide.none,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.onPrimary,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 0,
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.surfaceContainerHigh,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.outlineVariant),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.outlineVariant),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
+        ),
       ),
     );
   }

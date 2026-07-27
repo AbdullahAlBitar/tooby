@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/pages/home/home_page.dart';
 import 'presentation/pages/library/library_page.dart';
@@ -98,6 +99,8 @@ class MainNavigationScreen extends ConsumerWidget {
         },
         backgroundColor: Colors.transparent,
         elevation: 0,
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.onSurfaceVariant,
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
