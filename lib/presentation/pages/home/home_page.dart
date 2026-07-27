@@ -17,7 +17,7 @@ class HomePage extends ConsumerWidget {
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: Image.asset(
-          'assets/images/logo.png',
+          'assets/images/toopy_new_logo.png',
           height: 32,
           fit: BoxFit.contain,
         ),
