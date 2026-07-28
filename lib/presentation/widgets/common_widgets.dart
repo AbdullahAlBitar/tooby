@@ -88,7 +88,9 @@ class _VideoCardState extends State<VideoCard> {
               borderRadius: BorderRadius.circular(12),
               image: widget.thumbnail != null
                   ? DecorationImage(
-                      image: FileImage(File(widget.thumbnail!)),
+                      image: widget.thumbnail!.startsWith('http://') || widget.thumbnail!.startsWith('https://') 
+                          ? NetworkImage(widget.thumbnail!) as ImageProvider
+                          : FileImage(File(widget.thumbnail!)),
                       fit: BoxFit.cover,
                     )
                   : null,

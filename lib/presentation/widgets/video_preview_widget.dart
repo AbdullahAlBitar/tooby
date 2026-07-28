@@ -31,7 +31,11 @@ class _VideoPreviewWidgetState extends State<VideoPreviewWidget> {
 
   Future<void> _initPlayer() async {
     try {
-      _controller = VideoPlayerController.file(File(widget.videoPath));
+      if (widget.videoPath.startsWith('http://') || widget.videoPath.startsWith('https://')) {
+        _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoPath));
+      } else {
+        _controller = VideoPlayerController.file(File(widget.videoPath));
+      }
       await _controller.initialize();
       await _controller.setVolume(0.0); // Mute for preview
       

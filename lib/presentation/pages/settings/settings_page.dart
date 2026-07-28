@@ -19,6 +19,14 @@ class SettingsPage extends ConsumerWidget {
         children: [
           _buildSettingItem(
             context,
+            icon: Icons.wifi,
+            title: "Network Streaming (Server/Client)",
+            subtitle: "Host videos or connect to another device",
+            onTap: () => Navigator.pushNamed(context, '/network-settings'),
+          ),
+          const Divider(color: AppColors.outlineVariant),
+          _buildSettingItem(
+            context,
             icon: Icons.history,
             title: "Clear Watch History",
             onTap: () => _showClearHistoryDialog(context, ref),

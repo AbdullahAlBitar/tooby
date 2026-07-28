@@ -6,9 +6,26 @@ import '../data/models/video_model.dart';
 import '../data/models/tag_model.dart';
 import '../data/models/tag_type_model.dart';
 
+import '../data/repositories/remote_video_repository.dart';
+import '../data/repositories/remote_tag_repository.dart';
+import 'network_provider.dart';
+
 // Repositories
-final videoRepositoryProvider = Provider((ref) => VideoRepository());
-final tagRepositoryProvider = Provider((ref) => TagRepository());
+final videoRepositoryProvider = Provider<VideoRepository>((ref) {
+  final networkState = ref.watch(networkStateProvider);
+  if (networkState.isClient && networkState.serverUrl != null) {
+    return RemoteVideoRepository(baseUrl: networkState.serverUrl!);
+  }
+  return LocalVideoRepository();
+});
+
+final tagRepositoryProvider = Provider<TagRepository>((ref) {
+  final networkState = ref.watch(networkStateProvider);
+  if (networkState.isClient && networkState.serverUrl != null) {
+    return RemoteTagRepository(baseUrl: networkState.serverUrl!);
+  }
+  return LocalTagRepository();
+});
 
 // Services
 final videoScannerServiceProvider = Provider((ref) => VideoScannerService());

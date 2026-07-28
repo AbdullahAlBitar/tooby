@@ -10,6 +10,7 @@ import 'presentation/pages/tags/video_tag_editor_page.dart';
 import 'presentation/pages/search/search_page.dart';
 import 'presentation/pages/tags/tag_feed_page.dart';
 import 'presentation/pages/tags/manage_tag_types_page.dart';
+import 'presentation/pages/settings/network_settings_page.dart';
 
 final navigationIndexProvider = StateProvider<int>((ref) => 0);
 
@@ -54,6 +55,8 @@ class ToobyApp extends StatelessWidget {
             return MaterialPageRoute(builder: (_) => const SearchPage());
           case '/settings':
             return MaterialPageRoute(builder: (_) => const SettingsPage());
+          case '/network-settings':
+            return MaterialPageRoute(builder: (_) => const NetworkSettingsPage());
           case '/tag-feed':
             final args = settings.arguments as Map<String, dynamic>;
             return MaterialPageRoute(

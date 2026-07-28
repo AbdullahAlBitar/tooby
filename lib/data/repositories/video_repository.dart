@@ -2,14 +2,41 @@ import '../local/db_helper.dart';
 import '../models/video_model.dart';
 import '../models/watch_history_model.dart';
 
-class VideoRepository {
+abstract class VideoRepository {
+  Future<List<VideoModel>> getAllVideos();
+  Future<VideoModel?> getVideoById(int id);
+  Future<int> insertVideo(VideoModel video);
+  Future<void> updateVideo(VideoModel video);
+  Future<void> deleteVideo(int id);
+  
+  // Watch History
+  Future<void> saveWatchHistory(WatchHistoryModel history);
+  Future<WatchHistoryModel?> getWatchHistory(int videoId);
+  Future<List<Map<String, dynamic>>> getContinueWatching();
+  Future<List<VideoModel>> getRecentVideos();
+  Future<void> clearWatchHistory();
+
+  // Search
+  Future<List<VideoModel>> searchVideos({
+    required String query,
+    required List<int> includedTagIds,
+    required List<int> excludedTagIds,
+    required List<int> includedTypeIds,
+    required List<int> excludedTypeIds,
+    bool matchAllTags = false,
+  });
+}
+
+class LocalVideoRepository implements VideoRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
+  @override
   Future<List<VideoModel>> getAllVideos() async {
     final List<Map<String, dynamic>> maps = await _dbHelper.queryAll('videos');
     return List.generate(maps.length, (i) => VideoModel.fromMap(maps[i]));
   }
 
+  @override
   Future<VideoModel?> getVideoById(int id) async {
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery(
       'SELECT * FROM videos WHERE id = ?',
@@ -21,10 +48,12 @@ class VideoRepository {
     return null;
   }
 
+  @override
   Future<int> insertVideo(VideoModel video) async {
     return await _dbHelper.insert('videos', video.toMap());
   }
 
+  @override
   Future<void> updateVideo(VideoModel video) async {
     await _dbHelper.update(
       'videos',
@@ -34,15 +63,17 @@ class VideoRepository {
     );
   }
 
+  @override
   Future<void> deleteVideo(int id) async {
     await _dbHelper.delete('videos', 'id = ?', [id]);
   }
 
-  // Watch History
+  @override
   Future<void> saveWatchHistory(WatchHistoryModel history) async {
     await _dbHelper.insert('watch_history', history.toMap());
   }
 
+  @override
   Future<WatchHistoryModel?> getWatchHistory(int videoId) async {
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery(
       'SELECT * FROM watch_history WHERE video_id = ?',
@@ -54,8 +85,8 @@ class VideoRepository {
     return null;
   }
 
+  @override
   Future<List<Map<String, dynamic>>> getContinueWatching() async {
-    // Join videos and watch_history ordered by last_watched desc
     return await _dbHelper.rawQuery('''
       SELECT v.*, h.last_position, h.last_watched 
       FROM videos v
@@ -65,6 +96,7 @@ class VideoRepository {
     ''', []);
   }
 
+  @override
   Future<List<VideoModel>> getRecentVideos() async {
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery(
       'SELECT * FROM videos ORDER BY id DESC LIMIT 20',
@@ -73,10 +105,12 @@ class VideoRepository {
     return List.generate(maps.length, (i) => VideoModel.fromMap(maps[i]));
   }
 
+  @override
   Future<void> clearWatchHistory() async {
     await _dbHelper.rawDelete('DELETE FROM watch_history', []);
   }
 
+  @override
   Future<List<VideoModel>> searchVideos({
     required String query,
     required List<int> includedTagIds,
@@ -88,13 +122,11 @@ class VideoRepository {
     List<String> conditions = [];
     List<dynamic> args = [];
 
-    // Title search
     if (query.isNotEmpty) {
       conditions.add('v.title LIKE ?');
       args.add('%$query%');
     }
 
-    // Excluded tag IDs
     if (excludedTagIds.isNotEmpty) {
       final placeholders = List.filled(excludedTagIds.length, '?').join(',');
       conditions.add('''
@@ -106,7 +138,6 @@ class VideoRepository {
       args.addAll(excludedTagIds);
     }
 
-    // Included tag IDs
     if (includedTagIds.isNotEmpty) {
       final placeholders = List.filled(includedTagIds.length, '?').join(',');
       if (matchAllTags) {
@@ -129,7 +160,6 @@ class VideoRepository {
       }
     }
 
-    // Included tag type IDs
     if (includedTypeIds.isNotEmpty) {
       final placeholders = List.filled(includedTypeIds.length, '?').join(',');
       conditions.add('''
@@ -142,7 +172,6 @@ class VideoRepository {
       args.addAll(includedTypeIds);
     }
 
-    // Excluded tag type IDs
     if (excludedTypeIds.isNotEmpty) {
       final placeholders = List.filled(excludedTypeIds.length, '?').join(',');
       conditions.add('''

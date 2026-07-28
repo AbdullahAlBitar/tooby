@@ -3,19 +3,48 @@ import '../models/tag_model.dart';
 import '../models/tag_type_model.dart';
 import '../models/video_model.dart';
 
-class TagRepository {
+abstract class TagRepository {
+  // Tag Types CRUD
+  Future<List<TagTypeModel>> getAllTagTypes();
+  Future<int> insertTagType(String name);
+  Future<int> getOrCreateTagType(String name);
+  Future<void> updateTagType(int id, String name);
+  Future<void> deleteTagType(int id);
+
+  // Tags CRUD
+  Future<List<TagModel>> getAllTags();
+  Future<List<Map<String, dynamic>>> getAllTagsWithCount();
+  Future<int> insertTag(String name, {int? typeId});
+  Future<int> getOrCreateTag(String name, {int? typeId});
+  Future<void> updateTag(TagModel tag);
+  Future<void> deleteTag(int id);
+
+  // Video-Tag relationship
+  Future<void> addTagToVideo(int videoId, int tagId);
+  Future<void> removeTagFromVideo(int videoId, int tagId);
+  Future<List<TagModel>> getTagsForVideo(int videoId);
+  Future<List<VideoModel>> getVideosForTag(int tagId);
+
+  // Recommendation logic
+  Future<List<VideoModel>> getRecommendedVideos(int videoId);
+  Future<Map<String, dynamic>?> getRandomTagTypeWithVideos();
+}
+
+class LocalTagRepository implements TagRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  // Tag Types CRUD
+  @override
   Future<List<TagTypeModel>> getAllTagTypes() async {
     final List<Map<String, dynamic>> maps = await _dbHelper.queryAll('tag_types');
     return List.generate(maps.length, (i) => TagTypeModel.fromMap(maps[i]));
   }
 
+  @override
   Future<int> insertTagType(String name) async {
     return await _dbHelper.insert('tag_types', {'name': name});
   }
 
+  @override
   Future<int> getOrCreateTagType(String name) async {
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery(
       'SELECT id FROM tag_types WHERE name = ?',
@@ -27,16 +56,17 @@ class TagRepository {
     return await insertTagType(name);
   }
 
+  @override
   Future<void> updateTagType(int id, String name) async {
     await _dbHelper.update('tag_types', {'name': name}, 'id = ?', [id]);
   }
 
+  @override
   Future<void> deleteTagType(int id) async {
-    // Note: Foreign key cascading with ON DELETE SET DEFAULT will handle resetting tag associations to type_id=1
     await _dbHelper.delete('tag_types', 'id = ?', [id]);
   }
 
-  // Tags CRUD
+  @override
   Future<List<TagModel>> getAllTags() async {
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery('''
       SELECT t.*, ty.name as type_name, COUNT(vt.video_id) as video_count
@@ -48,6 +78,7 @@ class TagRepository {
     return List.generate(maps.length, (i) => TagModel.fromMap(maps[i]));
   }
 
+  @override
   Future<List<Map<String, dynamic>>> getAllTagsWithCount() async {
     return await _dbHelper.rawQuery('''
       SELECT t.*, ty.name as type_name, COUNT(vt.video_id) as video_count
@@ -59,6 +90,7 @@ class TagRepository {
     ''', []);
   }
 
+  @override
   Future<int> insertTag(String name, {int? typeId}) async {
     return await _dbHelper.insert('tags', {
       'name': name,
@@ -66,6 +98,7 @@ class TagRepository {
     });
   }
 
+  @override
   Future<int> getOrCreateTag(String name, {int? typeId}) async {
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery(
       'SELECT id FROM tags WHERE name = ?',
@@ -77,6 +110,7 @@ class TagRepository {
     return await insertTag(name, typeId: typeId);
   }
 
+  @override
   Future<void> updateTag(TagModel tag) async {
     await _dbHelper.update(
       'tags',
@@ -89,11 +123,12 @@ class TagRepository {
     );
   }
 
+  @override
   Future<void> deleteTag(int id) async {
     await _dbHelper.delete('tags', 'id = ?', [id]);
   }
 
-  // Video-Tag relationship
+  @override
   Future<void> addTagToVideo(int videoId, int tagId) async {
     await _dbHelper.insert('video_tags', {
       'video_id': videoId,
@@ -101,6 +136,7 @@ class TagRepository {
     });
   }
 
+  @override
   Future<void> removeTagFromVideo(int videoId, int tagId) async {
     await _dbHelper.delete(
       'video_tags',
@@ -109,6 +145,7 @@ class TagRepository {
     );
   }
 
+  @override
   Future<List<TagModel>> getTagsForVideo(int videoId) async {
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery('''
       SELECT t.*, ty.name as type_name,
@@ -121,6 +158,7 @@ class TagRepository {
     return List.generate(maps.length, (i) => TagModel.fromMap(maps[i]));
   }
 
+  @override
   Future<List<VideoModel>> getVideosForTag(int tagId) async {
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery('''
       SELECT v.* FROM videos v
@@ -130,11 +168,8 @@ class TagRepository {
     return List.generate(maps.length, (i) => VideoModel.fromMap(maps[i]));
   }
 
-  // Recommendation logic
+  @override
   Future<List<VideoModel>> getRecommendedVideos(int videoId) async {
-    // 1. Get tags for the current video
-    // 2. Find other videos that share the same tags
-    // 3. Count shared tags and order by count
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery('''
       SELECT v.*, COUNT(vt2.tag_id) as shared_tag_count
       FROM videos v
@@ -151,8 +186,8 @@ class TagRepository {
     return List.generate(maps.length, (i) => VideoModel.fromMap(maps[i]));
   }
 
+  @override
   Future<Map<String, dynamic>?> getRandomTagTypeWithVideos() async {
-    // Select tag_types that have at least one tag linked to at least one video
     final List<Map<String, dynamic>> maps = await _dbHelper.rawQuery('''
       SELECT ty.* 
       FROM tag_types ty
@@ -166,7 +201,6 @@ class TagRepository {
       final typeId = maps.first['id'] as int;
       final typeName = maps.first['name'] as String;
 
-      // Fetch all videos under this tag type
       final List<Map<String, dynamic>> videoMaps = await _dbHelper.rawQuery('''
         SELECT DISTINCT v.* 
         FROM videos v

@@ -11,8 +11,8 @@ import '../data/repositories/video_repository.dart';
 import 'thumbnail_service.dart';
 
 class VideoScannerService {
-  final VideoRepository _videoRepository = VideoRepository();
-  final TagRepository _tagRepository = TagRepository();
+  final VideoRepository _videoRepository = LocalVideoRepository();
+  final TagRepository _tagRepository = LocalTagRepository();
   final ThumbnailService _thumbnailService = ThumbnailService();
   final _videoInfo = FlutterVideoInfo();
 

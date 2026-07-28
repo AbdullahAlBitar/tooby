@@ -36,7 +36,11 @@ class _VideoPlayerWidgetState extends ConsumerState<VideoPlayerWidget> {
   }
 
   Future<void> _initializePlayer() async {
-    _videoPlayerController = VideoPlayerController.file(File(widget.videoPath));
+    if (widget.videoPath.startsWith('http://') || widget.videoPath.startsWith('https://')) {
+      _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(widget.videoPath));
+    } else {
+      _videoPlayerController = VideoPlayerController.file(File(widget.videoPath));
+    }
     
     try {
       await _videoPlayerController.initialize();
