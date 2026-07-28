@@ -12,19 +12,19 @@ class AppColors {
   static const Color surfaceContainerHighest = Color(0xFF252626);
 
   // Primary Action
-  static const Color primary = Color(0xFFC6C6C7);
-  static const Color onPrimary = Color(0xFF3F4041);
-  static const Color primaryContainer = Color(0xFF454747);
-  static const Color onPrimaryContainer = Color(0xFFD0D0D0);
+  static const Color primary = Color(0xFF9B7CFF);
+  static const Color onPrimary = Color(0xFF100F1A);
+  static const Color primaryContainer = Color(0xFF2A2142);
+  static const Color onPrimaryContainer = Color(0xFFE8DEFF);
 
   // Secondary/Metadata
-  static const Color secondaryDim = Color(0xFF9F9D9D);
+  static const Color secondaryDim = Color(0xFF7B61D6);
   static const Color onSurface = Color(0xFFE7E5E4);
   static const Color onSurfaceVariant = Color(0xFFACABAA);
 
   // Tertiary/Highlights
-  static const Color tertiary = Color(0xFFEFF8FF);
-  static const Color tertiaryContainer = Color(0xFFD0ECFF);
+  static const Color tertiary = Color(0xFFCBB8FF);
+  static const Color tertiaryContainer = Color(0xFF33254D);
 
   // Utility
   static const Color outline = Color(0xFF767575);

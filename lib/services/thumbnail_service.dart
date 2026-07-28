@@ -21,7 +21,7 @@ class ThumbnailService {
       // Generate a unique filename using MD5 hash of the video path
       // This avoids collisions for same-named files in different folders
       final String pathHash = md5.convert(utf8.encode(videoPath)).toString();
-      final String fileName = '${pathHash}.jpg';
+      final String fileName = '$pathHash.jpg';
       final String fullThumbnailPath = p.join(thumbnailDir, fileName);
 
       // Check if thumbnail already exists to avoid redundant generation

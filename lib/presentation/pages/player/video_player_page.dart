@@ -25,7 +25,7 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
     final recommendationsAsync = ref.watch(recommendedVideosProvider(widget.videoId));
 
     final appBar = AppBar(
-      backgroundColor: AppColors.surface.withOpacity(0.9),
+      backgroundColor: AppColors.surface.withValues(alpha: 0.9),
       elevation: 0,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: AppColors.primary),
