@@ -37,7 +37,7 @@ class _VideoPreviewWidgetState extends State<VideoPreviewWidget> {
         _controller = VideoPlayerController.file(File(widget.videoPath));
       }
       await _controller.initialize();
-      await _controller.setVolume(0.0); // Mute for preview
+      // await _controller.setVolume(0.0); // Mute for preview
       
       if (mounted) {
         setState(() {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
@@ -26,12 +27,30 @@ class VideoCard extends StatefulWidget {
 
 class _VideoCardState extends State<VideoCard> {
   bool _isPreviewing = false;
+  Timer? _previewTimer;
 
   void _togglePreview() {
     if (widget.videoPath == null) return;
-    setState(() {
-      _isPreviewing = !_isPreviewing;
+
+    if (_isPreviewing) {
+      _previewTimer?.cancel();
+      setState(() => _isPreviewing = false);
+      return;
+    }
+
+    setState(() => _isPreviewing = true);
+    _previewTimer?.cancel();
+    _previewTimer = Timer(const Duration(seconds: 25), () {
+      if (mounted) {
+        setState(() => _isPreviewing = false);
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    _previewTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -39,6 +58,7 @@ class _VideoCardState extends State<VideoCard> {
     return InkWell(
       onTap: () {
         if (_isPreviewing) {
+          _previewTimer?.cancel();
           setState(() => _isPreviewing = false);
         }
         widget.onTap();
@@ -61,15 +81,22 @@ class _VideoCardState extends State<VideoCard> {
               widget.title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
           if (widget.duration != null)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 4.0,
+                vertical: 2.0,
+              ),
               child: Text(
                 widget.duration!,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.onSurfaceVariant),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                ),
               ),
             ),
         ],
@@ -88,7 +115,9 @@ class _VideoCardState extends State<VideoCard> {
               borderRadius: BorderRadius.circular(12),
               image: widget.thumbnail != null
                   ? DecorationImage(
-                      image: widget.thumbnail!.startsWith('http://') || widget.thumbnail!.startsWith('https://') 
+                      image:
+                          widget.thumbnail!.startsWith('http://') ||
+                              widget.thumbnail!.startsWith('https://')
                           ? NetworkImage(widget.thumbnail!) as ImageProvider
                           : FileImage(File(widget.thumbnail!)),
                       fit: BoxFit.cover,
@@ -96,7 +125,13 @@ class _VideoCardState extends State<VideoCard> {
                   : null,
             ),
             child: widget.thumbnail == null
-                ? const Center(child: Icon(Icons.video_library, color: AppColors.outline, size: 48))
+                ? const Center(
+                    child: Icon(
+                      Icons.video_library,
+                      color: AppColors.outline,
+                      size: 48,
+                    ),
+                  )
                 : null,
           ),
           if (widget.duration != null)
@@ -144,13 +179,17 @@ class TagChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primaryContainer : AppColors.surfaceContainerHigh,
+          color: isSelected
+              ? AppColors.primaryContainer
+              : AppColors.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(100),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? AppColors.onPrimaryContainer : AppColors.onSurfaceVariant,
+            color: isSelected
+                ? AppColors.onPrimaryContainer
+                : AppColors.onSurfaceVariant,
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
