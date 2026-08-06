@@ -4,83 +4,144 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../data/models/tag_model.dart';
+import '../../../data/models/tag_type_model.dart';
+import '../../../data/models/video_model.dart';
 import '../../../providers/video_provider.dart';
 import '../../widgets/common_widgets.dart';
 
-final isScanningProvider = StateProvider<bool>((ref) => false);
-final autoTagByFolderProvider = StateProvider<bool>((ref) => false);
+// State providers for library filtering
+final selectedTagTypeProvider = StateProvider<TagTypeModel?>((ref) => null);
+final selectedTagsProvider = StateProvider<Set<int>>((ref) => {});
+
+// Filtered videos based on the selected tag type and tags
+final libraryFilteredVideosProvider = FutureProvider<List<VideoModel>>((
+  ref,
+) async {
+  final tagType = ref.watch(selectedTagTypeProvider);
+  final selectedTags = ref.watch(selectedTagsProvider);
+
+  if (tagType == null) {
+    return ref.watch(allVideosProvider.future);
+  }
+
+  final repo = ref.watch(videoRepositoryProvider);
+  if (selectedTags.isEmpty) {
+    return repo.searchVideos(
+      query: '',
+      includedTagIds: [],
+      excludedTagIds: [],
+      includedTypeIds: [tagType.id!],
+      excludedTypeIds: [],
+    );
+  }
+
+  return repo.searchVideos(
+    query: '',
+    includedTagIds: selectedTags.toList(),
+    excludedTagIds: [],
+    includedTypeIds:
+        [], // searchVideos matches exact tags, which already belong to this type
+    excludedTypeIds: [],
+    matchAllTags: true,
+  );
+});
 
 class LibraryPage extends ConsumerWidget {
   const LibraryPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final allVideosAsync = ref.watch(allVideosProvider);
+    final filteredVideosAsync = ref.watch(libraryFilteredVideosProvider);
     final isScanning = ref.watch(isScanningProvider);
+    final allVideosAsync = ref.watch(allVideosProvider);
+
+    final tagTypesAsync = ref.watch(allTagTypesProvider);
+    final selectedType = ref.watch(selectedTagTypeProvider);
 
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            const Text('Library', style: TextStyle(fontWeight: FontWeight.bold)),
-            allVideosAsync.when(
-              data: (videos) => Text(
-                '${videos.length} videos',
-                style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Library',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                allVideosAsync.when(
+                  data: (videos) => Text(
+                    '${videos.length} total videos',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                  loading: () => const Text(
+                    'Loading...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 8.0,
               ),
-              loading: () => const Text('Loading...', style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant)),
-              error: (_, __) => const SizedBox.shrink(),
+              child: Row(
+                children: [
+                  Icon(Icons.filter_list_alt, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: tagTypesAsync.when(
+                      data: (types) {
+                        if (types.isEmpty) return const Text("No tags yet.");
+                        return DropdownButton<TagTypeModel?>(
+                          value: selectedType,
+                          hint: const Text("Select category"),
+                          isExpanded: true,
+                          underline: const SizedBox.shrink(),
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text("All Videos"),
+                            ),
+                            ...types.map(
+                              (t) => DropdownMenuItem(
+                                value: t,
+                                child: Text(t.name),
+                              ),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            ref.read(selectedTagTypeProvider.notifier).state =
+                                val;
+                            ref.read(selectedTagsProvider.notifier).state =
+                                {}; // Reset tags
+                          },
+                        );
+                      },
+                      loading: () => const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      error: (_, __) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
-          IconButton(
-            icon: Icon(
-              ref.watch(autoTagByFolderProvider) ? Icons.label : Icons.label_off_outlined,
-              color: ref.watch(autoTagByFolderProvider) ? AppColors.primary : AppColors.outline,
-            ),
-            onPressed: () {
-              ref.read(autoTagByFolderProvider.notifier).update((state) => !state);
-            },
-            tooltip: 'Auto-tag by folder',
-          ),
-          IconButton(
-            icon: const Icon(Icons.new_label_outlined, color: AppColors.primary),
-            onPressed: () async {
-              ref.read(isScanningProvider.notifier).state = true;
-              try {
-                await ref.read(videoScannerServiceProvider).syncFolderTags();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Folder tags synced!")),
-                  );
-                }
-              } finally {
-                ref.read(isScanningProvider.notifier).state = false;
-              }
-            },
-            tooltip: 'Sync folder tags',
-          ),
-          IconButton(
-            icon: const Icon(Icons.timer_outlined, color: AppColors.primary),
-            onPressed: () async {
-              ref.read(isScanningProvider.notifier).state = true;
-              try {
-                await ref.read(videoScannerServiceProvider).refreshAllDurations();
-                ref.invalidate(allVideosProvider);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Durations refreshed!")),
-                  );
-                }
-              } finally {
-                ref.read(isScanningProvider.notifier).state = false;
-              }
-            },
-            tooltip: 'Refresh durations',
-          ),
           if (isScanning)
             const Center(
               child: Padding(
@@ -88,7 +149,10 @@ class LibraryPage extends ConsumerWidget {
                 child: SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
             )
@@ -100,64 +164,168 @@ class LibraryPage extends ConsumerWidget {
             ),
         ],
       ),
-      body: allVideosAsync.when(
-        data: (videos) {
-          if (videos.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.video_library_outlined, size: 64, color: AppColors.outline),
-                  const SizedBox(height: 16),
-                  Text(
-                    "Your library is empty",
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppColors.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: AppColors.onPrimary,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          allVideosAsync.when(
+            data: (videos) {
+              if (videos.isEmpty) return const SizedBox.shrink();
+              return _buildFilterSection(context, ref, selectedType);
+            },
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          Expanded(
+            child: filteredVideosAsync.when(
+              data: (videos) {
+                // If there are no videos AT ALL in the DB, show empty state
+                final allVideos = ref.read(allVideosProvider).valueOrNull ?? [];
+                if (allVideos.isEmpty) {
+                  return _buildEmptyState(context, ref, isScanning);
+                }
+
+                if (videos.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "No videos found for this filter.",
+                      style: TextStyle(color: AppColors.onSurfaceVariant),
                     ),
-                    onPressed: () => _pickAndScan(context, ref),
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text("Select Folder to Scan"),
-                  ),
-                ],
-              ),
-            );
-          }
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 24,
-              childAspectRatio: 1.05,
-            ),
-            itemCount: videos.length,
-            itemBuilder: (context, index) {
-              final v = videos[index];
-              return VideoCard(
-                title: v.title,
-                thumbnail: v.thumbnail,
-                duration: v.duration,
-                videoPath: v.path,
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    '/player',
-                    arguments: {'videoId': v.id!},
                   );
-                },
+                }
+
+                return GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 24,
+                    childAspectRatio: 1.05,
+                  ),
+                  itemCount: videos.length,
+                  itemBuilder: (context, index) {
+                    final v = videos[index];
+                    return VideoCard(
+                      title: v.title,
+                      thumbnail: v.thumbnail,
+                      duration: v.duration,
+                      videoPath: v.path,
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/player',
+                          arguments: {'videoId': v.id!},
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, stack) => Center(child: Text("Error: $err")),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterSection(BuildContext context, WidgetRef ref, TagTypeModel? selectedType) {
+    // final tagTypesAsync = ref.watch(allTagTypesProvider);
+    // final selectedType = ref.watch(selectedTagTypeProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Padding(
+        //   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        //   child: Row(
+        //     children: [
+        //       const Text("Filter by: ", style: TextStyle(fontWeight: FontWeight.bold)),
+        //       const SizedBox(width: 8),
+        //       Expanded(
+        //         child: tagTypesAsync.when(
+        //           data: (types) {
+        //             if (types.isEmpty) return const Text("No tags yet.");
+        //             return DropdownButton<TagTypeModel?>(
+        //               value: selectedType,
+        //               hint: const Text("Select category"),
+        //               isExpanded: true,
+        //               underline: const SizedBox.shrink(),
+        //               items: [
+        //                 const DropdownMenuItem(
+        //                   value: null,
+        //                   child: Text("All Videos"),
+        //                 ),
+        //                 ...types.map((t) => DropdownMenuItem(
+        //                   value: t,
+        //                   child: Text(t.name),
+        //                 ))
+        //               ],
+        //               onChanged: (val) {
+        //                 ref.read(selectedTagTypeProvider.notifier).state = val;
+        //                 ref.read(selectedTagsProvider.notifier).state = {}; // Reset tags
+        //               },
+        //             );
+        //           },
+        //           loading: () => const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+        //           error: (_, __) => const SizedBox.shrink(),
+        //         ),
+        //       ),
+        //     ],
+        //   ),
+        // ),
+        if (selectedType != null) _buildTagChips(context, ref, selectedType),
+      ],
+    );
+  }
+
+  Widget _buildTagChips(
+    BuildContext context,
+    WidgetRef ref,
+    TagTypeModel type,
+  ) {
+    final tagsAsync = ref.watch(allTagsProvider);
+    final selectedTags = ref.watch(selectedTagsProvider);
+
+    return tagsAsync.when(
+      data: (tags) {
+        final filteredTags = tags.where((t) => t.typeId == type.id).toList();
+        if (filteredTags.isEmpty) return const SizedBox.shrink();
+
+        return SizedBox(
+          height: 48,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: filteredTags.length,
+            itemBuilder: (context, index) {
+              final tag = filteredTags[index];
+              final isSelected = selectedTags.contains(tag.id);
+
+              return Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: FilterChip(
+                  label: Text(tag.name),
+                  selected: isSelected,
+                  selectedColor: AppColors.primaryContainer,
+                  checkmarkColor: AppColors.onPrimaryContainer,
+                  onSelected: (selected) {
+                    final current = Set<int>.from(selectedTags);
+                    if (selected) {
+                      current.add(tag.id!);
+                    } else {
+                      current.remove(tag.id);
+                    }
+                    ref.read(selectedTagsProvider.notifier).state = current;
+                  },
+                ),
               );
             },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text("Error: $err")),
-      ),
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 
@@ -165,11 +333,11 @@ class LibraryPage extends ConsumerWidget {
     // 1. Request Permissions
     PermissionStatus status;
     if (Platform.isAndroid) {
-      final statuses = await [
-        Permission.storage,
-        Permission.videos,
-      ].request();
-      status = statuses[Permission.videos] ?? statuses[Permission.storage] ?? PermissionStatus.denied;
+      final statuses = await [Permission.storage, Permission.videos].request();
+      status =
+          statuses[Permission.videos] ??
+          statuses[Permission.storage] ??
+          PermissionStatus.denied;
     } else {
       status = await Permission.storage.request();
     }
@@ -183,12 +351,15 @@ class LibraryPage extends ConsumerWidget {
       return;
     }
 
-    final String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    final String? selectedDirectory = await FilePicker.platform
+        .getDirectoryPath();
     if (selectedDirectory != null) {
       ref.read(isScanningProvider.notifier).state = true;
       try {
         final autoTag = ref.read(autoTagByFolderProvider);
-        await ref.read(videoScannerServiceProvider).scanDirectory(selectedDirectory, autoTag: autoTag);
+        await ref
+            .read(videoScannerServiceProvider)
+            .scanDirectory(selectedDirectory, autoTag: autoTag);
         ref.invalidate(allVideosProvider);
       } finally {
         ref.read(isScanningProvider.notifier).state = false;
@@ -200,11 +371,11 @@ class LibraryPage extends ConsumerWidget {
     // 1. Request Permissions (same as pickAndScan)
     PermissionStatus status;
     if (Platform.isAndroid) {
-      final statuses = await [
-        Permission.storage,
-        Permission.videos,
-      ].request();
-      status = statuses[Permission.videos] ?? statuses[Permission.storage] ?? PermissionStatus.denied;
+      final statuses = await [Permission.storage, Permission.videos].request();
+      status =
+          statuses[Permission.videos] ??
+          statuses[Permission.storage] ??
+          PermissionStatus.denied;
     } else {
       status = await Permission.storage.request();
     }
@@ -222,34 +393,46 @@ class LibraryPage extends ConsumerWidget {
     try {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Scanning full storage... this may take a moment.")),
+          const SnackBar(
+            content: Text("Scanning full storage... this may take a moment."),
+          ),
         );
       }
       final autoTag = ref.read(autoTagByFolderProvider);
-      await ref.read(videoScannerServiceProvider).scanFullStorage(autoTag: autoTag);
+      await ref
+          .read(videoScannerServiceProvider)
+          .scanFullStorage(autoTag: autoTag);
       ref.invalidate(allVideosProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Scan completed!")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Scan completed!")));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
       }
     } finally {
       ref.read(isScanningProvider.notifier).state = false;
     }
   }
 
-  Widget _buildEmptyState(BuildContext context, WidgetRef ref, bool isScanning) {
+  Widget _buildEmptyState(
+    BuildContext context,
+    WidgetRef ref,
+    bool isScanning,
+  ) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.video_library_outlined, size: 80, color: AppColors.outline),
+          const Icon(
+            Icons.video_library_outlined,
+            size: 80,
+            color: AppColors.outline,
+          ),
           const SizedBox(height: 24),
           Text(
             "No videos found",
@@ -273,7 +456,10 @@ class LibraryPage extends ConsumerWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: AppColors.onPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -296,19 +482,31 @@ class LibraryPage extends ConsumerWidget {
                 const SizedBox(height: 24),
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 48),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: SwitchListTile(
-                    title: const Text("Auto-Tag by Folder Name", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                    title: const Text(
+                      "Auto-Tag by Folder Name",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     value: ref.watch(autoTagByFolderProvider),
                     activeThumbColor: AppColors.primary,
                     onChanged: (val) {
                       ref.read(autoTagByFolderProvider.notifier).state = val;
                     },
-                    secondary: const Icon(Icons.label_outlined, color: AppColors.primary),
+                    secondary: const Icon(
+                      Icons.label_outlined,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
               ],

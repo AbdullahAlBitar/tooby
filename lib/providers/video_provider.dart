@@ -30,6 +30,10 @@ final tagRepositoryProvider = Provider<TagRepository>((ref) {
 // Services
 final videoScannerServiceProvider = Provider((ref) => VideoScannerService());
 
+// Shared state for scanning
+final isScanningProvider = StateProvider<bool>((ref) => false);
+final autoTagByFolderProvider = StateProvider<bool>((ref) => false);
+
 // State Providers
 final allVideosProvider = FutureProvider<List<VideoModel>>((ref) async {
   final repo = ref.watch(videoRepositoryProvider);

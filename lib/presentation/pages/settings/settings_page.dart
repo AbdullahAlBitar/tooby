@@ -32,16 +32,53 @@ class SettingsPage extends ConsumerWidget {
             onTap: () => _showClearHistoryDialog(context, ref),
           ),
           const Divider(color: AppColors.outlineVariant),
+          SwitchListTile(
+            title: const Text("Auto-tag by Folder Name", style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text("Automatically assign tags based on directory names when scanning", style: TextStyle(color: AppColors.onSurfaceVariant)),
+            secondary: const Icon(Icons.label, color: AppColors.primary),
+            activeThumbColor: AppColors.primary,
+            value: ref.watch(autoTagByFolderProvider),
+            onChanged: (val) {
+              ref.read(autoTagByFolderProvider.notifier).state = val;
+            },
+          ),
+          const Divider(color: AppColors.outlineVariant),
           _buildSettingItem(
             context,
-            icon: Icons.refresh,
-            title: "Rescan Library",
-            subtitle: "Update metadata and detect new videos",
-            onTap: () {
-              // Redirect to Library page rescan logic or implement here
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Go to Library tab to rescan specific folders")),
-              );
+            icon: Icons.new_label_outlined,
+            title: "Sync Folder Tags",
+            subtitle: "Update tags based on current folder structure",
+            onTap: () async {
+              ref.read(isScanningProvider.notifier).state = true;
+              try {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Syncing folder tags...")));
+                await ref.read(videoScannerServiceProvider).syncFolderTags();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Folder tags synced!")));
+                }
+              } finally {
+                ref.read(isScanningProvider.notifier).state = false;
+              }
+            },
+          ),
+          const Divider(color: AppColors.outlineVariant),
+          _buildSettingItem(
+            context,
+            icon: Icons.timer_outlined,
+            title: "Refresh Durations",
+            subtitle: "Update video duration metadata",
+            onTap: () async {
+              ref.read(isScanningProvider.notifier).state = true;
+              try {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Refreshing durations...")));
+                await ref.read(videoScannerServiceProvider).refreshAllDurations();
+                ref.invalidate(allVideosProvider);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Durations refreshed!")));
+                }
+              } finally {
+                ref.read(isScanningProvider.notifier).state = false;
+              }
             },
           ),
           const Divider(color: AppColors.outlineVariant),
