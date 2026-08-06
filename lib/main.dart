@@ -13,9 +13,19 @@ import 'presentation/pages/tags/tag_feed_page.dart';
 import 'presentation/pages/tags/manage_tag_types_page.dart';
 import 'presentation/pages/settings/network_settings_page.dart';
 
+import 'dart:io';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
 final navigationIndexProvider = StateProvider<int>((ref) => 0);
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  if (Platform.isWindows || Platform.isLinux) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+  
   runApp(
     const ProviderScope(
       child: ToobyApp(),

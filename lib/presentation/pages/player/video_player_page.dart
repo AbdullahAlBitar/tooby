@@ -5,6 +5,7 @@ import '../../../data/models/video_model.dart';
 import '../../../providers/video_provider.dart';
 import '../../widgets/video_player_widget.dart';
 import '../../widgets/common_widgets.dart';
+import '../../../data/models/watch_history_model.dart';
 
 class VideoPlayerPage extends ConsumerStatefulWidget {
   final int videoId;
@@ -17,6 +18,14 @@ class VideoPlayerPage extends ConsumerStatefulWidget {
 
 class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
   bool _showAppBar = false;
+  late Future<WatchHistoryModel?> _watchHistoryFuture;
+  final GlobalKey _videoPlayerKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _watchHistoryFuture = ref.read(videoRepositoryProvider).getWatchHistory(widget.videoId);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,28 +107,29 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
     AsyncValue<List<dynamic>> tagsAsync,
     AsyncValue<List<VideoModel>> recommendationsAsync,
   ) {
-    return OrientationBuilder(
-      builder: (context, orientation) {
-        if (orientation == Orientation.landscape) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Left half (Video + details)
-              Expanded(
-                flex: 2,
-                child: Column(
-                  children: [
-                    FutureBuilder(
-                      future: ref.read(videoRepositoryProvider).getWatchHistory(widget.videoId),
-                      builder: (context, snapshot) {
-                        final initialPosition = snapshot.data?.lastPosition ?? Duration.zero;
-                        return VideoPlayerWidget(
-                          videoId: widget.videoId,
-                          videoPath: video.path,
-                          initialPosition: initialPosition,
-                        );
-                      },
-                    ),
+    return FutureBuilder(
+      future: _watchHistoryFuture,
+      builder: (context, snapshot) {
+        final initialPosition = snapshot.data?.lastPosition ?? Duration.zero;
+        final videoPlayer = VideoPlayerWidget(
+          key: _videoPlayerKey,
+          videoId: widget.videoId,
+          videoPath: video.path,
+          initialPosition: initialPosition,
+        );
+
+        return OrientationBuilder(
+          builder: (context, orientation) {
+            if (orientation == Orientation.landscape) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Left half (Video + details)
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      children: [
+                        videoPlayer,
                     Expanded(
                       child: SingleChildScrollView(
                         child: Padding(
@@ -178,17 +188,7 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            FutureBuilder(
-              future: ref.read(videoRepositoryProvider).getWatchHistory(widget.videoId),
-              builder: (context, snapshot) {
-                final initialPosition = snapshot.data?.lastPosition ?? Duration.zero;
-                return VideoPlayerWidget(
-                  videoId: widget.videoId,
-                  videoPath: video.path,
-                  initialPosition: initialPosition,
-                );
-              },
-            ),
+            videoPlayer,
             Expanded(
               child: SingleChildScrollView(
                 child: Padding(
