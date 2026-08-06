@@ -29,22 +29,19 @@ class _VideoCardState extends State<VideoCard> {
   bool _isPreviewing = false;
   Timer? _previewTimer;
 
-  void _togglePreview() {
+  void _startPreview() {
     if (widget.videoPath == null) return;
-
-    if (_isPreviewing) {
-      _previewTimer?.cancel();
-      setState(() => _isPreviewing = false);
-      return;
-    }
-
-    setState(() => _isPreviewing = true);
     _previewTimer?.cancel();
-    _previewTimer = Timer(const Duration(seconds: 25), () {
-      if (mounted) {
-        setState(() => _isPreviewing = false);
-      }
+    _previewTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _isPreviewing = true);
     });
+  }
+
+  void _stopPreview() {
+    _previewTimer?.cancel();
+    if (_isPreviewing && mounted) {
+      setState(() => _isPreviewing = false);
+    }
   }
 
   @override
@@ -55,16 +52,16 @@ class _VideoCardState extends State<VideoCard> {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () {
-        if (_isPreviewing) {
-          _previewTimer?.cancel();
-          setState(() => _isPreviewing = false);
-        }
-        widget.onTap();
-      },
-      onLongPress: _togglePreview,
-      borderRadius: BorderRadius.circular(12),
+    return Listener(
+      onPointerDown: (_) => _startPreview(),
+      onPointerUp: (_) => _stopPreview(),
+      onPointerCancel: (_) => _stopPreview(),
+      child: InkWell(
+        onTap: () {
+          _stopPreview();
+          widget.onTap();
+        },
+        borderRadius: BorderRadius.circular(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -101,6 +98,7 @@ class _VideoCardState extends State<VideoCard> {
             ),
         ],
       ),
+    ),
     );
   }
 
