@@ -7,6 +7,8 @@ import '../../widgets/video_player_widget.dart';
 import '../../widgets/common_widgets.dart';
 import '../../../data/models/watch_history_model.dart';
 
+import 'dart:math';
+
 class VideoPlayerPage extends ConsumerStatefulWidget {
   final int videoId;
 
@@ -41,6 +43,21 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
         onPressed: () => Navigator.pop(context),
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Icons.shuffle, color: AppColors.primary),
+          onPressed: () async {
+            final videos = await ref.read(videoRepositoryProvider).getAllVideos();
+            if (videos.isNotEmpty && context.mounted) {
+              final randomVideo = videos[Random().nextInt(videos.length)];
+              Navigator.pushNamed(context, '/player', arguments: {'videoId': randomVideo.id});
+            } else if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("No videos available to play.")),
+              );
+            }
+          },
+          tooltip: 'Play Random Video',
+        ),
         IconButton(
           icon: const Icon(Icons.refresh, color: AppColors.primary),
           onPressed: () async {
@@ -227,6 +244,8 @@ class _VideoPlayerPageState extends ConsumerState<VideoPlayerPage> {
             ),
           ],
         );
+      },
+    );
       },
     );
   }

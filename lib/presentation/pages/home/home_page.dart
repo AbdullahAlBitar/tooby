@@ -4,6 +4,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/models/video_model.dart';
 import '../../../providers/video_provider.dart';
 import '../../widgets/common_widgets.dart';
+import 'dart:math';
+
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
@@ -23,19 +25,34 @@ class HomePage extends ConsumerWidget {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.shuffle, color: AppColors.primary),
+            onPressed: () async {
+              final videos = await ref.read(videoRepositoryProvider).getAllVideos();
+              if (videos.isNotEmpty && context.mounted) {
+                final randomVideo = videos[Random().nextInt(videos.length)];
+                Navigator.pushNamed(context, '/player', arguments: {'videoId': randomVideo.id});
+              } else if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("No videos available to play.")),
+                );
+              }
+            },
+            tooltip: 'Play Random Video',
+          ),
+          IconButton(
             icon: const Icon(Icons.search, color: AppColors.primary),
             onPressed: () {
               Navigator.pushNamed(context, '/search');
             },
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.0),
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: AppColors.surfaceContainerHigh,
-              child: Icon(Icons.person, size: 20, color: AppColors.primary),
-            ),
-          ),
+          // const Padding(
+          //   padding: EdgeInsets.symmetric(horizontal: 16.0),
+          //   child: CircleAvatar(
+          //     radius: 16,
+          //     backgroundColor: AppColors.surfaceContainerHigh,
+          //     child: Icon(Icons.person, size: 20, color: AppColors.primary),
+          //   ),
+          // ),
         ],
       ),
       body: SingleChildScrollView(
