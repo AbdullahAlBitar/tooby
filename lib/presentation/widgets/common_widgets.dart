@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
+import '../../../providers/global_video_provider.dart';
 
 import 'video_preview_widget.dart';
 
-class VideoCard extends StatefulWidget {
+class VideoCard extends ConsumerStatefulWidget {
   final String title;
   final String? thumbnail;
   final String? duration;
@@ -22,18 +24,28 @@ class VideoCard extends StatefulWidget {
   });
 
   @override
-  State<VideoCard> createState() => _VideoCardState();
+  ConsumerState<VideoCard> createState() => _VideoCardState();
 }
 
-class _VideoCardState extends State<VideoCard> {
+class _VideoCardState extends ConsumerState<VideoCard> {
   bool _isPreviewing = false;
   Timer? _previewTimer;
+  bool _wasPlayingBeforePreview = false;
 
   void _startPreview() {
     if (widget.videoPath == null) return;
     _previewTimer?.cancel();
-    _previewTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) setState(() => _isPreviewing = true);
+    _previewTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        final videoController = ref.read(globalVideoProvider.notifier).videoPlayerController;
+        if (videoController?.value.isPlaying == true) {
+          videoController?.pause();
+          _wasPlayingBeforePreview = true;
+        } else {
+          _wasPlayingBeforePreview = false;
+        }
+        setState(() => _isPreviewing = true);
+      }
     });
   }
 
@@ -41,6 +53,10 @@ class _VideoCardState extends State<VideoCard> {
     _previewTimer?.cancel();
     if (_isPreviewing && mounted) {
       setState(() => _isPreviewing = false);
+      if (_wasPlayingBeforePreview) {
+        ref.read(globalVideoProvider.notifier).videoPlayerController?.play();
+        _wasPlayingBeforePreview = false;
+      }
     }
   }
 

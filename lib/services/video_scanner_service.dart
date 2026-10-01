@@ -209,6 +209,34 @@ class VideoScannerService {
     return removedCount;
   }
 
+  Future<void> renameVideo(int videoId, String newTitle) async {
+    final video = await _videoRepository.getVideoById(videoId);
+    if (video == null) throw Exception("Video not found in database.");
+
+    final File file = File(video.path);
+    if (!await file.exists()) {
+      throw Exception("Original video file not found on disk.");
+    }
+
+    final String dir = p.dirname(video.path);
+    final String ext = p.extension(video.path);
+    
+    // Sanitize the new title for file system
+    final String sanitizedTitle = newTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+    if (sanitizedTitle.isEmpty) throw Exception("Invalid title.");
+
+    final String newFileName = '$sanitizedTitle$ext';
+    final String newPath = p.join(dir, newFileName);
+
+    final File newFile = File(newPath);
+    if (await newFile.exists() && newPath != video.path) {
+      throw Exception("A file with this name already exists in the same folder.");
+    }
+
+    await file.rename(newPath);
+    await _videoRepository.updateVideo(video.copyWith(title: sanitizedTitle, path: newPath));
+  }
+
   String _getRelativePath(String filePath) {
     final parts = p.split(filePath);
     if (parts.length >= 2) {

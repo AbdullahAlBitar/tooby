@@ -6,12 +6,13 @@ import 'presentation/pages/home/home_page.dart';
 import 'presentation/pages/library/library_page.dart';
 import 'presentation/pages/tags/tag_page.dart';
 import 'presentation/pages/settings/settings_page.dart';
-import 'presentation/pages/player/video_player_page.dart';
+import 'package:floatube_player/floatube_player.dart' hide PlayerControls, VideoSeekBar;
 import 'presentation/pages/tags/video_tag_editor_page.dart';
 import 'presentation/pages/search/search_page.dart';
 import 'presentation/pages/tags/tag_feed_page.dart';
 import 'presentation/pages/tags/manage_tag_types_page.dart';
 import 'presentation/pages/settings/network_settings_page.dart';
+import 'presentation/widgets/custom_player_controls/player_controls.dart';
 
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -38,18 +39,26 @@ class ToobyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Tooby',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
-      initialRoute: '/',
-      onGenerateRoute: (settings) {
+    return FloatingViewProvider(
+      controller: FloatingViewController(
+        initialInsets: const ViewportInsets(bottom: kBottomNavigationBarHeight),
+        useCustomControls: true,
+        customControlsBuilder: (videoController, overlayState) {
+          return PlayerControls(
+            controller: videoController,
+            overlayState: overlayState,
+          );
+        },
+      ),
+      child: MaterialApp(
+        title: 'Tooby',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.darkTheme,
+        initialRoute: '/',
+        onGenerateRoute: (settings) {
         switch (settings.name) {
           case '/':
             return MaterialPageRoute(builder: (_) => const MainNavigationScreen());
-          case '/player':
-            final args = settings.arguments as Map<String, dynamic>;
-            return MaterialPageRoute(builder: (_) => VideoPlayerPage(videoId: args['videoId']));
           case '/library':
             return MaterialPageRoute(builder: (_) => const LibraryPage());
           case '/tags':
@@ -82,7 +91,7 @@ class ToobyApp extends StatelessWidget {
             return MaterialPageRoute(builder: (_) => const MainNavigationScreen());
         }
       },
-    );
+    ));
   }
 }
 

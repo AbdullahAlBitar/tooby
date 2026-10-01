@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/models/video_model.dart';
 import '../../widgets/common_widgets.dart';
 import '../../../providers/video_provider.dart';
+import '../../../providers/global_video_provider.dart';
 
 final includedTagIdsProvider = StateProvider.autoDispose<List<int>>((ref) => []);
 final excludedTagIdsProvider = StateProvider.autoDispose<List<int>>((ref) => []);
@@ -351,11 +352,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               duration: v.duration,
               videoPath: v.path,
               onTap: () {
-                Navigator.pushNamed(
-                  context,
-                  '/player',
-                  arguments: {'videoId': v.id!},
-                );
+                openVideo(context, ref, v.id!);
               },
             );
           },

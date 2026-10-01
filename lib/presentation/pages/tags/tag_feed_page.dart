@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../providers/video_provider.dart';
 import '../../widgets/common_widgets.dart';
-import '../player/video_player_page.dart';
+import '../../../providers/global_video_provider.dart';
 
 class TagFeedPage extends ConsumerWidget {
   final int tagId;
@@ -40,12 +40,7 @@ class TagFeedPage extends ConsumerWidget {
                 title: v.title,
                 thumbnail: v.thumbnail,
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => VideoPlayerPage(videoId: v.id!),
-                    ),
-                  );
+                  openVideo(context, ref, v.id!);
                 },
               );
             },

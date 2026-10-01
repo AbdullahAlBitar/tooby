@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/models/video_model.dart';
 import '../../../providers/video_provider.dart';
 import '../../widgets/common_widgets.dart';
+import '../../../providers/global_video_provider.dart';
 import 'dart:math';
 
 class HomePage extends ConsumerWidget {
@@ -30,7 +31,7 @@ class HomePage extends ConsumerWidget {
               final videos = await ref.read(videoRepositoryProvider).getAllVideos();
               if (videos.isNotEmpty && context.mounted) {
                 final randomVideo = videos[Random().nextInt(videos.length)];
-                Navigator.pushNamed(context, '/player', arguments: {'videoId': randomVideo.id});
+                openVideo(context, ref, randomVideo.id!);
               } else if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("No videos available to play.")),
@@ -90,7 +91,7 @@ class HomePage extends ConsumerWidget {
                                 thumbnail: v.thumbnail,
                                 duration: v.duration,
                                 videoPath: v.path,
-                                onTap: () => _navigateToPlayer(context, v.id!),
+                                onTap: () => _navigateToPlayer(context, ref, v.id!),
                               ),
                             );
                           },
@@ -133,7 +134,7 @@ class HomePage extends ConsumerWidget {
                                 thumbnail: h['thumbnail'],
                                 duration: h['duration'],
                                 videoPath: h['path'],
-                                onTap: () => _navigateToPlayer(context, h['id']),
+                                onTap: () => _navigateToPlayer(context, ref, h['id']),
                               ),
                             );
                           },
@@ -173,7 +174,7 @@ class HomePage extends ConsumerWidget {
                                 thumbnail: v.thumbnail,
                                 duration: v.duration,
                                 videoPath: v.path,
-                                onTap: () => _navigateToPlayer(context, v.id!),
+                                onTap: () => _navigateToPlayer(context, ref, v.id!),
                               ),
                             );
                           },
@@ -221,11 +222,7 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  void _navigateToPlayer(BuildContext context, int videoId) {
-    Navigator.pushNamed(
-      context,
-      '/player',
-      arguments: {'videoId': videoId},
-    );
+  void _navigateToPlayer(BuildContext context, WidgetRef ref, int videoId) {
+    openVideo(context, ref, videoId);
   }
 }

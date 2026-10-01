@@ -145,6 +145,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "10.3.10"
+  floatube_player:
+    dependency: "direct main"
+    description:
+      name: floatube_player
+      sha256: fa978b84747a30d62097ac23a779abbd5db4cd7d89b46da9942886b314a596b0
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.1"
   flutter:
     dependency: "direct main"
     description: flutter

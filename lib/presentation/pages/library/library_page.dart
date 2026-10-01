@@ -9,6 +9,7 @@ import '../../../data/models/tag_type_model.dart';
 import '../../../data/models/video_model.dart';
 import '../../../providers/video_provider.dart';
 import '../../widgets/common_widgets.dart';
+import '../../../providers/global_video_provider.dart';
 
 // State providers for library filtering
 final selectedTagTypeProvider = StateProvider<TagTypeModel?>((ref) => null);
@@ -210,11 +211,7 @@ class LibraryPage extends ConsumerWidget {
                       duration: v.duration,
                       videoPath: v.path,
                       onTap: () {
-                        Navigator.pushNamed(
-                          context,
-                          '/player',
-                          arguments: {'videoId': v.id!},
-                        );
+                        openVideo(context, ref, v.id!);
                       },
                     );
                   },

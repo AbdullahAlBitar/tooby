@@ -55,6 +55,7 @@ dependencies:
   qr_flutter: ^4.1.0
   sqflite_common_ffi: ^2.3.7+1
   sqlite3_flutter_libs: ^0.5.42
+  floatube_player: ^0.2.1
 
 dev_dependencies:
   flutter_test:
