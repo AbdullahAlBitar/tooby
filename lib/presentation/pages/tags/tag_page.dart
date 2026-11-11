@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../widgets/common_widgets.dart';
 import '../../../data/models/tag_model.dart';
 import '../../../data/models/tag_type_model.dart';
 import '../../../providers/video_provider.dart';
@@ -50,7 +51,7 @@ class TagPage extends ConsumerWidget {
             }
 
             return ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + miniPlayerPadding(ref)),
               itemCount: types.length,
               itemBuilder: (context, index) {
                 final type = types[index];

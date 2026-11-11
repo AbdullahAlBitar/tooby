@@ -4,12 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../data/models/tag_model.dart';
 import '../../../data/models/tag_type_model.dart';
 import '../../../data/models/video_model.dart';
 import '../../../providers/video_provider.dart';
 import '../../widgets/common_widgets.dart';
-import '../../../providers/global_video_provider.dart';
 
 // State providers for library filtering
 final selectedTagTypeProvider = StateProvider<TagTypeModel?>((ref) => null);
@@ -63,119 +61,88 @@ class LibraryPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: Row(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Library',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                allVideosAsync.when(
-                  data: (videos) => Text(
-                    '${videos.length} total videos',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                  loading: () => const Text(
-                    'Loading...',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                  error: (_, __) => const SizedBox.shrink(),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 8.0,
+            const Text('Library', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              allVideosAsync.when(
+                data: (videos) {
+                  final shown = filteredVideosAsync.valueOrNull?.length;
+                  return selectedType == null || shown == null
+                      ? '${videos.length} videos'
+                      : '$shown of ${videos.length} videos';
+                },
+                loading: () => 'Loading...',
+                error: (_, __) => '',
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.filter_list_alt, color: AppColors.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: tagTypesAsync.when(
-                      data: (types) {
-                        if (types.isEmpty) return const Text("No tags yet.");
-                        return DropdownButton<TagTypeModel?>(
-                          value: selectedType,
-                          hint: const Text("Select category"),
-                          isExpanded: true,
-                          underline: const SizedBox.shrink(),
-                          items: [
-                            const DropdownMenuItem(
-                              value: null,
-                              child: Text("All Videos"),
-                            ),
-                            ...types.map(
-                              (t) => DropdownMenuItem(
-                                value: t,
-                                child: Text(t.name),
-                              ),
-                            ),
-                          ],
-                          onChanged: (val) {
-                            ref.read(selectedTagTypeProvider.notifier).state =
-                                val;
-                            ref.read(selectedTagsProvider.notifier).state =
-                                {}; // Reset tags
-                          },
-                        );
-                      },
-                      loading: () => const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      error: (_, __) => const SizedBox.shrink(),
-                    ),
-                  ),
-                ],
-              ),
+              style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
             ),
           ],
         ),
         actions: [
           if (isScanning)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.only(right: 16.0),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.primary,
-                  ),
-                ),
+            const Padding(
+              padding: EdgeInsets.only(right: 16.0),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
               ),
             )
           else
             IconButton(
-              icon: const Icon(Icons.refresh, color: AppColors.primary),
+              icon: const Icon(Icons.create_new_folder_outlined, color: AppColors.primary),
               onPressed: () => _pickAndScan(context, ref),
-              tooltip: 'Scan for videos',
+              tooltip: 'Scan a folder for videos',
             ),
         ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          allVideosAsync.when(
-            data: (videos) {
-              if (videos.isEmpty) return const SizedBox.shrink();
-              return _buildFilterSection(context, ref, selectedType);
+          // Category chips (replaces the old dropdown)
+          tagTypesAsync.when(
+            data: (types) {
+              final hasVideos = allVideosAsync.valueOrNull?.isNotEmpty ?? false;
+              if (types.isEmpty || !hasVideos) return const SizedBox.shrink();
+              return SizedBox(
+                height: 48,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: const Text('All videos'),
+                        selected: selectedType == null,
+                        onSelected: (_) {
+                          ref.read(selectedTagTypeProvider.notifier).state = null;
+                          ref.read(selectedTagsProvider.notifier).state = {};
+                        },
+                      ),
+                    ),
+                    for (final t in types)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(t.name),
+                          selected: selectedType?.id == t.id,
+                          onSelected: (_) {
+                            ref.read(selectedTagTypeProvider.notifier).state = t;
+                            ref.read(selectedTagsProvider.notifier).state = {};
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              );
             },
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
           ),
+          if (selectedType != null) _buildTagChips(context, ref, selectedType),
           Expanded(
             child: filteredVideosAsync.when(
               data: (videos) {
@@ -194,27 +161,17 @@ class LibraryPage extends ConsumerWidget {
                   );
                 }
 
-                return GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 24,
-                    childAspectRatio: 1.05,
-                  ),
-                  itemCount: videos.length,
-                  itemBuilder: (context, index) {
-                    final v = videos[index];
-                    return VideoCard(
-                      title: v.title,
-                      thumbnail: v.thumbnail,
-                      duration: v.duration,
-                      videoPath: v.path,
-                      onTap: () {
-                        openVideo(context, ref, v.id!);
-                      },
-                    );
+                return RefreshIndicator(
+                  color: AppColors.primary,
+                  onRefresh: () async {
+                    ref.invalidate(allVideosProvider);
+                    ref.invalidate(watchProgressProvider);
+                    await ref.read(allVideosProvider.future);
                   },
+                  child: VideoGrid(
+                    videos: videos,
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  ),
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -223,56 +180,6 @@ class LibraryPage extends ConsumerWidget {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildFilterSection(BuildContext context, WidgetRef ref, TagTypeModel? selectedType) {
-    // final tagTypesAsync = ref.watch(allTagTypesProvider);
-    // final selectedType = ref.watch(selectedTagTypeProvider);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Padding(
-        //   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        //   child: Row(
-        //     children: [
-        //       const Text("Filter by: ", style: TextStyle(fontWeight: FontWeight.bold)),
-        //       const SizedBox(width: 8),
-        //       Expanded(
-        //         child: tagTypesAsync.when(
-        //           data: (types) {
-        //             if (types.isEmpty) return const Text("No tags yet.");
-        //             return DropdownButton<TagTypeModel?>(
-        //               value: selectedType,
-        //               hint: const Text("Select category"),
-        //               isExpanded: true,
-        //               underline: const SizedBox.shrink(),
-        //               items: [
-        //                 const DropdownMenuItem(
-        //                   value: null,
-        //                   child: Text("All Videos"),
-        //                 ),
-        //                 ...types.map((t) => DropdownMenuItem(
-        //                   value: t,
-        //                   child: Text(t.name),
-        //                 ))
-        //               ],
-        //               onChanged: (val) {
-        //                 ref.read(selectedTagTypeProvider.notifier).state = val;
-        //                 ref.read(selectedTagsProvider.notifier).state = {}; // Reset tags
-        //               },
-        //             );
-        //           },
-        //           loading: () => const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-        //           error: (_, __) => const SizedBox.shrink(),
-        //         ),
-        //       ),
-        //     ],
-        //   ),
-        // ),
-        if (selectedType != null) _buildTagChips(context, ref, selectedType),
-      ],
     );
   }
 

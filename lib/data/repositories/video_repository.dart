@@ -16,6 +16,9 @@ abstract class VideoRepository {
   Future<List<VideoModel>> getRecentVideos();
   Future<void> clearWatchHistory();
 
+  /// Last watched position (ms) for every video that has history.
+  Future<Map<int, int>> getAllWatchPositions();
+
   // Search
   Future<List<VideoModel>> searchVideos({
     required String query,
@@ -108,6 +111,12 @@ class LocalVideoRepository implements VideoRepository {
   @override
   Future<void> clearWatchHistory() async {
     await _dbHelper.rawDelete('DELETE FROM watch_history', []);
+  }
+
+  @override
+  Future<Map<int, int>> getAllWatchPositions() async {
+    final rows = await _dbHelper.rawQuery('SELECT video_id, last_position FROM watch_history', []);
+    return {for (final r in rows) r['video_id'] as int: (r['last_position'] as int?) ?? 0};
   }
 
   @override

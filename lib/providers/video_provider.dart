@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/utils/format.dart';
 import '../data/repositories/video_repository.dart';
 import '../data/repositories/tag_repository.dart';
 import '../services/video_scanner_service.dart';
@@ -93,4 +94,19 @@ final videosForTagProvider = FutureProvider.family<List<VideoModel>, int>((ref, 
 final randomTagTypeVideosProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   final repo = ref.watch(tagRepositoryProvider);
   return await repo.getRandomTagTypeWithVideos();
+});
+
+/// Watch progress (0..1) per video id, used for the progress bar on cards.
+final watchProgressProvider = FutureProvider<Map<int, double>>((ref) async {
+  final repo = ref.watch(videoRepositoryProvider);
+  final positions = await repo.getAllWatchPositions();
+  final videos = await ref.watch(allVideosProvider.future);
+  final result = <int, double>{};
+  for (final v in videos) {
+    final pos = positions[v.id];
+    final total = parseDurationString(v.duration);
+    if (pos == null || total == null || total.inMilliseconds == 0) continue;
+    result[v.id!] = (pos / total.inMilliseconds).clamp(0.0, 1.0);
+  }
+  return result;
 });

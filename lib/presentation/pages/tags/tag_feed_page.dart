@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../providers/video_provider.dart';
 import '../../widgets/common_widgets.dart';
-import '../../../providers/global_video_provider.dart';
+import '../../../player/player_service.dart';
 
 class TagFeedPage extends ConsumerWidget {
   final int tagId;
@@ -18,33 +18,35 @@ class TagFeedPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: Text('#$tagName', style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('#$tagName', style: const TextStyle(fontWeight: FontWeight.bold)),
+            if (videosAsync.valueOrNull != null)
+              Text('${videosAsync.valueOrNull!.length} videos',
+                  style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant)),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Play all (shuffle)',
+            icon: const Icon(Icons.shuffle_rounded, color: AppColors.primary),
+            onPressed: () {
+              final list = [...?videosAsync.valueOrNull]..shuffle();
+              if (list.isNotEmpty) openVideo(context, ref, list.first.id!);
+            },
+          ),
+        ],
       ),
       body: videosAsync.when(
         data: (videos) {
           if (videos.isEmpty) {
-            return const Center(child: Text("No videos found for this tag"));
+            return const Center(
+              child: Text("No videos found for this tag",
+                  style: TextStyle(color: AppColors.onSurfaceVariant)),
+            );
           }
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 24,
-              childAspectRatio: 0.8,
-            ),
-            itemCount: videos.length,
-            itemBuilder: (context, index) {
-              final v = videos[index];
-              return VideoCard(
-                title: v.title,
-                thumbnail: v.thumbnail,
-                onTap: () {
-                  openVideo(context, ref, v.id!);
-                },
-              );
-            },
-          );
+          return VideoGrid(videos: videos);
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(child: Text("Error: $err")),

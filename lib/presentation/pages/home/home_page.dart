@@ -1,11 +1,14 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/video_model.dart';
+import '../../../main.dart' show navigationIndexProvider;
+import '../../../player/player_service.dart';
 import '../../../providers/video_provider.dart';
 import '../../widgets/common_widgets.dart';
-import '../../../providers/global_video_provider.dart';
-import 'dart:math';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -26,7 +29,8 @@ class HomePage extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.shuffle, color: AppColors.primary),
+            icon: const Icon(Icons.shuffle_rounded, color: AppColors.primary),
+            tooltip: 'Play Random Video',
             onPressed: () async {
               final videos = await ref.read(videoRepositoryProvider).getAllVideos();
               if (videos.isNotEmpty && context.mounted) {
@@ -38,191 +42,216 @@ class HomePage extends ConsumerWidget {
                 );
               }
             },
-            tooltip: 'Play Random Video',
           ),
           IconButton(
-            icon: const Icon(Icons.search, color: AppColors.primary),
-            onPressed: () {
-              Navigator.pushNamed(context, '/search');
-            },
+            icon: const Icon(Icons.search_rounded, color: AppColors.primary),
+            tooltip: 'Filter videos',
+            onPressed: () => Navigator.pushNamed(context, '/search'),
           ),
-          // const Padding(
-          //   padding: EdgeInsets.symmetric(horizontal: 16.0),
-          //   child: CircleAvatar(
-          //     radius: 16,
-          //     backgroundColor: AppColors.surfaceContainerHigh,
-          //     child: Icon(Icons.person, size: 20, color: AppColors.primary),
-          //   ),
-          // ),
+          const SizedBox(width: 4),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: () async {
+          ref.invalidate(randomTagTypeVideosProvider);
+          ref.invalidate(continueWatchingProvider);
+          ref.invalidate(recentVideosProvider);
+          ref.invalidate(watchProgressProvider);
+          await ref.read(recentVideosProvider.future);
+        },
+        child: ListView(
+          padding: EdgeInsets.only(top: 8, bottom: 24 + miniPlayerPadding(ref)),
           children: [
-            // Random TagType Section
+            // Continue watching
+            continueWatchingAsync.when(
+              data: (rows) {
+                if (rows.isEmpty) return const SizedBox.shrink();
+                final videos = rows.map(VideoModel.fromMap).toList();
+                return _VideoRow(
+                  title: 'Continue watching',
+                  icon: Icons.history_rounded,
+                  videos: videos,
+                );
+              },
+              loading: () => const _RowPlaceholder(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+
+            // Random tag type
             randomTagTypeVideosAsync.when(
               data: (data) {
                 if (data == null) return const SizedBox.shrink();
                 final String typeName = data['typeName'];
                 final List<VideoModel> videos = data['videos'] as List<VideoModel>;
                 if (videos.isEmpty) return const SizedBox.shrink();
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSection(
-                      context,
-                      typeName.toUpperCase(),
-                      SizedBox(
-                        height: 240,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: videos.length,
-                          itemBuilder: (context, index) {
-                            final v = videos[index];
-                            return Container(
-                              width: 260,
-                              margin: const EdgeInsets.only(right: 16),
-                              child: VideoCard(
-                                title: v.title,
-                                thumbnail: v.thumbnail,
-                                duration: v.duration,
-                                videoPath: v.path,
-                                onTap: () => _navigateToPlayer(context, ref, v.id!),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                  ],
+                return _VideoRow(
+                  title: typeName,
+                  icon: Icons.auto_awesome_rounded,
+                  subtitle: 'A random pick from your tags · pull to refresh',
+                  videos: videos,
                 );
               },
-              loading: () => const Center(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24.0),
-                  child: CircularProgressIndicator(color: AppColors.primary),
-                ),
-              ),
+              loading: () => const _RowPlaceholder(),
               error: (_, __) => const SizedBox.shrink(),
             ),
 
-            // Continue Watching
-            _buildSection(
-              context,
-              "Continue Watching",
-              continueWatchingAsync.when(
-                data: (histories) => histories.isEmpty
-                    ? const SizedBox.shrink()
-                    : SizedBox(
-                        height: 240,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: histories.length,
-                          itemBuilder: (context, index) {
-                            final h = histories[index];
-                            return Container(
-                              width: 260,
-                              margin: const EdgeInsets.only(right: 16),
-                              child: VideoCard(
-                                title: h['title'],
-                                thumbnail: h['thumbnail'],
-                                duration: h['duration'],
-                                videoPath: h['path'],
-                                onTap: () => _navigateToPlayer(context, ref, h['id']),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
-              onViewAll: () {},
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Recent Videos
-            _buildSection(
-              context,
-              "Recent Videos",
-              recentVideosAsync.when(
-                data: (videos) => videos.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Text("No videos found. Go to Library to scan."),
-                      )
-                    : SizedBox(
-                        height: 240,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: videos.length,
-                          itemBuilder: (context, index) {
-                            final v = videos[index];
-                            return Container(
-                              width: 260,
-                              margin: const EdgeInsets.only(right: 16),
-                              child: VideoCard(
-                                title: v.title,
-                                thumbnail: v.thumbnail,
-                                duration: v.duration,
-                                videoPath: v.path,
-                                onTap: () => _navigateToPlayer(context, ref, v.id!),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
-              onViewAll: () {},
+            // Recently added
+            recentVideosAsync.when(
+              data: (videos) => videos.isEmpty
+                  ? const _EmptyHome()
+                  : _VideoRow(
+                      title: 'Recently added',
+                      icon: Icons.new_releases_outlined,
+                      videos: videos,
+                      onSeeAll: () => ref.read(navigationIndexProvider.notifier).state = 1,
+                    ),
+              loading: () => const _RowPlaceholder(),
+              error: (_, __) => const SizedBox.shrink(),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildSection(
-    BuildContext context,
-    String title,
-    Widget content, {
-    VoidCallback? onViewAll,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              if (onViewAll != null)
-                TextButton(
-                  onPressed: onViewAll,
-                  child: const Text("View all", style: TextStyle(color: AppColors.primary)),
+class _VideoRow extends ConsumerWidget {
+  final String title;
+  final String? subtitle;
+  final IconData icon;
+  final List<VideoModel> videos;
+  final VoidCallback? onSeeAll;
+
+  const _VideoRow({
+    required this.title,
+    required this.icon,
+    required this.videos,
+    this.subtitle,
+    this.onSeeAll,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const cardWidth = 250.0;
+    const cardHeight = cardWidth * 9 / 16 + 54;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 10),
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                      ),
+                      if (subtitle != null)
+                        Text(subtitle!,
+                            style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
+                    ],
+                  ),
                 ),
-            ],
+                if (onSeeAll != null)
+                  TextButton(
+                    onPressed: onSeeAll,
+                    child: const Text('See all', style: TextStyle(color: AppColors.primary)),
+                  ),
+              ],
+            ),
           ),
-        ),
-        content,
-      ],
+          SizedBox(
+            height: cardHeight,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: videos.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final v = videos[index];
+                return SizedBox(
+                  width: cardWidth,
+                  child: VideoCard(
+                    title: v.title,
+                    thumbnail: v.thumbnail,
+                    duration: v.duration,
+                    videoPath: v.path,
+                    videoId: v.id,
+                    onTap: () => openVideo(context, ref, v.id!),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
+}
 
-  void _navigateToPlayer(BuildContext context, WidgetRef ref, int videoId) {
-    openVideo(context, ref, videoId);
+class _RowPlaceholder extends StatelessWidget {
+  const _RowPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 220,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
+        itemCount: 3,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, __) => Container(
+          width: 250,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyHome extends ConsumerWidget {
+  const _EmptyHome();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
+      child: Column(
+        children: [
+          const Icon(Icons.video_library_outlined, size: 72, color: AppColors.outline),
+          const SizedBox(height: 16),
+          const Text('No videos yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          const Text(
+            'Scan a folder in the Library tab to get started.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: () => ref.read(navigationIndexProvider.notifier).state = 1,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.onPrimary,
+            ),
+            icon: const Icon(Icons.folder_open_rounded),
+            label: const Text('Go to Library'),
+          ),
+        ],
+      ),
+    );
   }
 }

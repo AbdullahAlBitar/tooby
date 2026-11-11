@@ -105,6 +105,16 @@ class RemoteVideoRepository implements VideoRepository {
   }
 
   @override
+  Future<Map<int, int>> getAllWatchPositions() async {
+    // The server has no dedicated endpoint; use the continue-watching list.
+    final list = await getContinueWatching();
+    return {
+      for (final r in list)
+        if (r['id'] is int) r['id'] as int: (r['last_position'] as int?) ?? 0,
+    };
+  }
+
+  @override
   Future<void> clearWatchHistory() async {
     // Note: Didn't implement a clear endpoint, but could be added easily
   }

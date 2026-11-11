@@ -4,7 +4,6 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/models/video_model.dart';
 import '../../widgets/common_widgets.dart';
 import '../../../providers/video_provider.dart';
-import '../../../providers/global_video_provider.dart';
 
 final includedTagIdsProvider = StateProvider.autoDispose<List<int>>((ref) => []);
 final excludedTagIdsProvider = StateProvider.autoDispose<List<int>>((ref) => []);
@@ -335,28 +334,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             child: Text("No videos match selected filters", style: TextStyle(color: AppColors.onSurfaceVariant)),
           );
         }
-        return GridView.builder(
-          padding: const EdgeInsets.all(16),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 300,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 24,
-            childAspectRatio: 1.05,
-          ),
-          itemCount: videos.length,
-          itemBuilder: (context, index) {
-            final v = videos[index];
-            return VideoCard(
-              title: v.title,
-              thumbnail: v.thumbnail,
-              duration: v.duration,
-              videoPath: v.path,
-              onTap: () {
-                openVideo(context, ref, v.id!);
-              },
-            );
-          },
-        );
+        return VideoGrid(videos: videos);
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, _) => Center(child: Text("Error loading results: $err")),
