@@ -104,7 +104,7 @@ class _PlayerSeekBarState extends State<PlayerSeekBar> {
                     // Time bubble
                     if (dragging)
                       Positioned(
-                        left: (value * width - 36).clamp(0.0, width - 72),
+                        left: (value * width - 36).clamp(0.0, (width - 72).clamp(0.0, double.infinity)),
                         bottom: 30,
                         child: Container(
                           width: 72,

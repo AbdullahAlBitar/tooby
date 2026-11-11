@@ -104,6 +104,12 @@ class _PlayerControlsOverlayState extends State<PlayerControlsOverlay> {
 
   @override
   void dispose() {
+    // Safety net: if we go away mid minimize-drag, finish the drag so the
+    // player never stays stuck half-way.
+    if (_mode == _DragMode.minimize) {
+      final end = widget.onDragDownEnd;
+      Future.microtask(() => end(0));
+    }
     _playingSub?.cancel();
     _hideTimer?.cancel();
     _singleTapTimer?.cancel();

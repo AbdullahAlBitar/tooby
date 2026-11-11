@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
@@ -39,7 +40,8 @@ class _PlayerShell extends ConsumerStatefulWidget {
   ConsumerState<_PlayerShell> createState() => _PlayerShellState();
 }
 
-class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerProviderStateMixin {
+class _PlayerShellState extends ConsumerState<_PlayerShell>
+    with SingleTickerProviderStateMixin {
   /// 0 = expanded, 1 = mini-player.
   late final AnimationController _t = AnimationController(
     vsync: this,
@@ -47,6 +49,11 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
     duration: const Duration(milliseconds: 280),
   );
   final GlobalKey _videoKey = GlobalKey();
+
+  /// Scroll offset of the content under the video; scrolling up shrinks
+  /// the video (down to a quarter of the screen).
+  final ValueNotifier<double> _contentScroll = ValueNotifier<double>(0);
+  int? _lastSession;
 
   bool _dragging = false;
   double? _lastTarget;
@@ -56,6 +63,7 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
   @override
   void dispose() {
     _t.dispose();
+    _contentScroll.dispose();
     super.dispose();
   }
 
@@ -128,6 +136,13 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
       return const SizedBox.shrink();
     }
     _syncWithService(service);
+    if (_lastSession != service.sessionId) {
+      // New video: start with the full-size player again.
+      _lastSession = service.sessionId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _contentScroll.value = 0;
+      });
+    }
 
     return Material(
       type: MaterialType.transparency,
@@ -136,10 +151,18 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
           RootRouteObserver.instance.isAtRoot,
           RootRouteObserver.instance.hasPopup,
           _t,
+          _contentScroll,
         ]),
         builder: (context, _) {
-          final layout = _buildLayout(context, service, RootRouteObserver.instance.isAtRoot.value);
-          final hide = RootRouteObserver.instance.hasPopup.value && !service.isExpanded && !service.isFullscreen;
+          final layout = _buildLayout(
+            context,
+            service,
+            RootRouteObserver.instance.isAtRoot.value,
+          );
+          final hide =
+              RootRouteObserver.instance.hasPopup.value &&
+              !service.isExpanded &&
+              !service.isFullscreen;
           return IgnorePointer(
             ignoring: hide,
             child: AnimatedOpacity(
@@ -153,7 +176,11 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
     );
   }
 
-  Widget _buildLayout(BuildContext context, PlayerService service, bool atRoot) {
+  Widget _buildLayout(
+    BuildContext context,
+    PlayerService service,
+    bool atRoot,
+  ) {
     final mq = MediaQuery.of(context);
     final size = mq.size;
     final W = size.width;
@@ -167,7 +194,17 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
     final vw = (player.state.width ?? 16).toDouble();
     final vh = (player.state.height ?? 9).toDouble();
     final aspect = (vw > 0 && vh > 0) ? vw / vh : 16 / 9;
-    final boxH = (W / aspect).clamp(W * 9 / 16, H * 0.6).toDouble();
+    // Wide videos get at least a 16:9 box, tall ones up to 60% of the screen.
+    // (Both limits are kept in order so this also works in landscape.)
+    final minBox = math.min(W * 9 / 16, H * 0.6);
+    final boxH = (W / aspect)
+        .clamp(minBox, math.max(minBox, H * 0.6))
+        .toDouble();
+
+    // Scrolling the content up shrinks the video to at most 1/4 of the screen.
+    final collapsedH = math.min(boxH, H / 4);
+    final maxCollapse = boxH - collapsedH;
+    final videoH = boxH - _contentScroll.value.clamp(0.0, maxCollapse);
 
     final bottomInset = (atRoot ? kAppNavBarHeight : 0) + pad.bottom;
     const miniH = kMiniPlayerHeight;
@@ -186,7 +223,7 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
             0,
             lerpDouble(pad.top, 0, t)!,
             lerpDouble(W, miniVideoW, t)!,
-            lerpDouble(boxH, miniH, t)!,
+            lerpDouble(videoH, miniH, t)!,
           );
 
     final contentOpacity = (1 - t * 2.5).clamp(0.0, 1.0);
@@ -195,7 +232,7 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
     final isExpandedFully = t < 0.02;
     final miniDismissOpacity = (1 - _dismissDx.abs() / W).clamp(0.0, 1.0);
 
-    final contentTop = pad.top + boxH;
+    final contentTop = pad.top + videoH;
 
     return Stack(
       children: [
@@ -211,7 +248,11 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
               child: ColoredBox(
                 color: fs
                     ? Colors.black
-                    : Color.lerp(AppColors.surface, AppColors.surfaceContainerHigh, t)!,
+                    : Color.lerp(
+                        AppColors.surface,
+                        AppColors.surfaceContainerHigh,
+                        t,
+                      )!,
                 child: Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [
@@ -242,6 +283,8 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
                                   child: WatchContent(
                                     key: ValueKey(service.sessionId),
                                     service: service,
+                                    scrollOffset: _contentScroll,
+                                    maxCollapse: maxCollapse,
                                   ),
                                 ),
                                 if (service.panel == PlayerPanel.tags ||
@@ -280,7 +323,10 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
                                 resumeUponEnteringForegroundMode: false,
                               ),
                             ),
-                            if (!service.isInPip && t < 0.25)
+                            // Keep the controls mounted during the whole drag,
+                            // otherwise the drag-end event is lost and the
+                            // player gets stuck half-way.
+                            if (!service.isInPip)
                               IgnorePointer(
                                 ignoring: !isExpandedFully && !fs,
                                 child: Opacity(
@@ -307,10 +353,15 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
                           onTap: isMini ? service.expand : null,
                           onVerticalDragUpdate: _onMiniVerticalDrag,
                           onVerticalDragEnd: _onMiniVerticalDragEnd,
+                          onVerticalDragCancel: () => _onMiniVerticalDragEnd(
+                            DragEndDetails(primaryVelocity: 0),
+                          ),
                           onHorizontalDragUpdate: isMini
                               ? (d) => setState(() => _dismissDx += d.delta.dx)
                               : null,
-                          onHorizontalDragEnd: isMini ? (d) => _onMiniHorizontalDragEnd(d, W) : null,
+                          onHorizontalDragEnd: isMini
+                              ? (d) => _onMiniHorizontalDragEnd(d, W)
+                              : null,
                         ),
                       ),
                       Positioned(
@@ -338,7 +389,8 @@ class _PlayerShellState extends ConsumerState<_PlayerShell> with SingleTickerPro
                     ],
 
                     // Settings sheet (works in portrait and fullscreen).
-                    if (service.panel == PlayerPanel.settings && (isExpandedFully || fs))
+                    if (service.panel == PlayerPanel.settings &&
+                        (isExpandedFully || fs))
                       Positioned.fill(child: SettingsSheet(service: service)),
                   ],
                 ),
@@ -385,7 +437,10 @@ class _MiniBar extends StatelessWidget {
                 folder,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12),
+                style: const TextStyle(
+                  color: AppColors.onSurfaceVariant,
+                  fontSize: 12,
+                ),
               ),
             ],
           ),
@@ -396,7 +451,9 @@ class _MiniBar extends StatelessWidget {
           builder: (context, snap) => IconButton(
             onPressed: service.togglePlay,
             icon: Icon(
-              (snap.data ?? false) ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              (snap.data ?? false)
+                  ? Icons.pause_rounded
+                  : Icons.play_arrow_rounded,
               size: 30,
               color: AppColors.onSurface,
             ),
@@ -423,10 +480,8 @@ class _SlideUpPanel extends StatelessWidget {
       tween: Tween(begin: 1, end: 0),
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
-      builder: (context, v, child) => FractionalTranslation(
-        translation: Offset(0, v),
-        child: child,
-      ),
+      builder: (context, v, child) =>
+          FractionalTranslation(translation: Offset(0, v), child: child),
       child: Material(
         color: AppColors.surfaceContainer,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),

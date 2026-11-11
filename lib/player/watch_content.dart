@@ -15,7 +15,19 @@ import 'player_service.dart';
 /// and the up-next list.
 class WatchContent extends ConsumerStatefulWidget {
   final PlayerService service;
-  const WatchContent({super.key, required this.service});
+
+  /// Shared with the player layer, which shrinks the video as this grows.
+  final ValueNotifier<double> scrollOffset;
+
+  /// How many pixels the video can shrink by.
+  final double maxCollapse;
+
+  const WatchContent({
+    super.key,
+    required this.service,
+    required this.scrollOffset,
+    required this.maxCollapse,
+  });
 
   @override
   ConsumerState<WatchContent> createState() => _WatchContentState();
@@ -45,177 +57,257 @@ class _WatchContentState extends ConsumerState<WatchContent> {
   @override
   Widget build(BuildContext context) {
     final video = service.current!;
-    final tags = ref.watch(tagsForVideoProvider(video.id!)).valueOrNull ?? const [];
+    final tags =
+        ref.watch(tagsForVideoProvider(video.id!)).valueOrNull ?? const [];
     final folder = _folderOf(video.path);
 
     return Stack(
       children: [
-        CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                child: GestureDetector(
-                  onTap: () => setState(() => _titleExpanded = !_titleExpanded),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        video.title,
-                        maxLines: _titleExpanded ? null : 2,
-                        overflow: _titleExpanded ? null : TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          height: 1.25,
-                          color: AppColors.onSurface,
+        NotificationListener<ScrollUpdateNotification>(
+          onNotification: (n) {
+            if (n.depth == 0 && n.metrics.axis == Axis.vertical) {
+              widget.scrollOffset.value = n.metrics.pixels;
+            }
+            return false;
+          },
+          child: CustomScrollView(
+            slivers: [
+              // Grows exactly as fast as the video shrinks, so the list moves
+              // 1:1 with the finger while the video collapses.
+              SliverToBoxAdapter(
+                child: ValueListenableBuilder<double>(
+                  valueListenable: widget.scrollOffset,
+                  builder: (context, offset, _) =>
+                      SizedBox(height: offset.clamp(0.0, widget.maxCollapse)),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: GestureDetector(
+                    onTap: () =>
+                        setState(() => _titleExpanded = !_titleExpanded),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          video.title,
+                          maxLines: _titleExpanded ? null : 2,
+                          overflow: _titleExpanded
+                              ? null
+                              : TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            height: 1.25,
+                            color: AppColors.onSurface,
+                          ),
                         ),
+                        const SizedBox(height: 6),
+                        Text(
+                          [
+                            if (video.duration != null) video.duration!,
+                            if (folder.isNotEmpty) folder,
+                            if (_titleExpanded) video.path,
+                          ].join('  ·  '),
+                          maxLines: _titleExpanded ? 4 : 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.onSurfaceVariant,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Action row
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 56,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    children: [
+                      _Action(
+                        icon: Icons.sell_outlined,
+                        label: 'Tags',
+                        onTap: () => service.openPanel(PlayerPanel.tags),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        [
-                          if (video.duration != null) video.duration!,
-                          if (folder.isNotEmpty) folder,
-                          if (_titleExpanded) video.path,
-                        ].join('  ·  '),
-                        maxLines: _titleExpanded ? 4 : 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12.5),
+                      _Action(
+                        icon: Icons.drive_file_rename_outline_rounded,
+                        label: 'Rename',
+                        onTap: () => service.openPanel(PlayerPanel.rename),
+                      ),
+                      _Action(
+                        icon: Icons.shuffle_rounded,
+                        label: 'Shuffle',
+                        onTap: service.playRandom,
+                      ),
+                      _Action(
+                        icon: service.loop
+                            ? Icons.repeat_one_on_rounded
+                            : Icons.repeat_one_rounded,
+                        label: 'Loop',
+                        highlighted: service.loop,
+                        onTap: () => service.setLoop(!service.loop),
+                      ),
+                      if (PipBridge.instance.isSupported)
+                        _Action(
+                          icon: Icons.picture_in_picture_alt_rounded,
+                          label: 'PIP',
+                          onTap: service.enterPip,
+                        ),
+                      _Action(
+                        icon: Icons.image_outlined,
+                        label: 'Thumbnail',
+                        onTap: () async {
+                          _flash('Regenerating thumbnail…');
+                          final ok = await regenerateThumbnailFlow(
+                            ref,
+                            video.id!,
+                          );
+                          if (mounted) {
+                            _flash(
+                              ok
+                                  ? 'Thumbnail updated'
+                                  : 'Could not create thumbnail',
+                            );
+                          }
+                        },
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
 
-            // Action row
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 56,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  children: [
-                    _Action(
-                      icon: Icons.sell_outlined,
-                      label: 'Tags',
-                      onTap: () => service.openPanel(PlayerPanel.tags),
-                    ),
-                    _Action(
-                      icon: Icons.drive_file_rename_outline_rounded,
-                      label: 'Rename',
-                      onTap: () => service.openPanel(PlayerPanel.rename),
-                    ),
-                    _Action(icon: Icons.shuffle_rounded, label: 'Shuffle', onTap: service.playRandom),
-                    _Action(
-                      icon: service.loop ? Icons.repeat_one_on_rounded : Icons.repeat_one_rounded,
-                      label: 'Loop',
-                      highlighted: service.loop,
-                      onTap: () => service.setLoop(!service.loop),
-                    ),
-                    if (PipBridge.instance.isSupported)
-                      _Action(
-                        icon: Icons.picture_in_picture_alt_rounded,
-                        label: 'PIP',
-                        onTap: service.enterPip,
-                      ),
-                    _Action(
-                      icon: Icons.image_outlined,
-                      label: 'Thumbnail',
-                      onTap: () async {
-                        _flash('Regenerating thumbnail…');
-                        final ok = await regenerateThumbnailFlow(ref, video.id!);
-                        if (mounted) _flash(ok ? 'Thumbnail updated' : 'Could not create thumbnail');
-                      },
-                    ),
-                  ],
+              // Tags
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+                  child: tags.isEmpty
+                      ? InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => service.openPanel(PlayerPanel.tags),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(
+                                  Icons.add_rounded,
+                                  color: AppColors.primary,
+                                  size: 20,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Add tags to this video',
+                                  style: TextStyle(
+                                    color: AppColors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final t in tags)
+                              ActionChip(
+                                avatar: const Icon(
+                                  Icons.tag_rounded,
+                                  size: 16,
+                                  color: AppColors.primary,
+                                ),
+                                label: Text(t.name),
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => _openTagFeed(t.id!, t.name),
+                              ),
+                            ActionChip(
+                              avatar: const Icon(
+                                Icons.edit_rounded,
+                                size: 16,
+                                color: AppColors.primary,
+                              ),
+                              label: const Text('Edit'),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () =>
+                                  service.openPanel(PlayerPanel.tags),
+                            ),
+                          ],
+                        ),
                 ),
               ),
-            ),
 
-            // Tags
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-                child: tags.isEmpty
-                    ? InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () => service.openPanel(PlayerPanel.tags),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceContainerHigh,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.add_rounded, color: AppColors.primary, size: 20),
-                              SizedBox(width: 8),
-                              Text('Add tags to this video',
-                                  style: TextStyle(color: AppColors.onSurfaceVariant)),
-                            ],
+              const SliverToBoxAdapter(
+                child: Divider(color: AppColors.outlineVariant, height: 16),
+              ),
+
+              // Up next header
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Up next',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                      )
-                    : Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final t in tags)
-                            ActionChip(
-                              avatar: const Icon(Icons.tag_rounded, size: 16, color: AppColors.primary),
-                              label: Text(t.name),
-                              visualDensity: VisualDensity.compact,
-                              onPressed: () => _openTagFeed(t.id!, t.name),
-                            ),
-                          ActionChip(
-                            avatar: const Icon(Icons.edit_rounded, size: 16, color: AppColors.primary),
-                            label: const Text('Edit'),
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => service.openPanel(PlayerPanel.tags),
-                          ),
-                        ],
                       ),
+                      const Text(
+                        'Autoplay',
+                        style: TextStyle(
+                          color: AppColors.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Switch(
+                        value: service.autoplay,
+                        onChanged: service.setAutoplay,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
 
-            const SliverToBoxAdapter(child: Divider(color: AppColors.outlineVariant, height: 16)),
-
-            // Up next header
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: Text('Up next',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              if (service.upNext.isEmpty)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-                    const Text('Autoplay',
-                        style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
-                    Switch(value: service.autoplay, onChanged: service.setAutoplay),
-                  ],
+                  ),
+                )
+              else
+                SliverList.builder(
+                  itemCount: service.upNext.length,
+                  itemBuilder: (context, i) => _UpNextTile(
+                    video: service.upNext[i],
+                    onTap: () => service.open(service.upNext[i].id!),
+                  ),
+                ),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: MediaQuery.viewPaddingOf(context).bottom + 24,
                 ),
               ),
-            ),
-
-            if (service.upNext.isEmpty)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                ),
-              )
-            else
-              SliverList.builder(
-                itemCount: service.upNext.length,
-                itemBuilder: (context, i) => _UpNextTile(
-                  video: service.upNext[i],
-                  onTap: () => service.open(service.upNext[i].id!),
-                ),
-              ),
-            SliverToBoxAdapter(child: SizedBox(height: MediaQuery.viewPaddingOf(context).bottom + 24)),
-          ],
+            ],
+          ),
         ),
         if (_message != null)
           Positioned(
@@ -260,7 +352,9 @@ class _Action extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Material(
-        color: highlighted ? AppColors.primaryContainer : AppColors.surfaceContainerHigh,
+        color: highlighted
+            ? AppColors.primaryContainer
+            : AppColors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
@@ -269,14 +363,24 @@ class _Action extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Row(
               children: [
-                Icon(icon, size: 18, color: highlighted ? AppColors.onPrimaryContainer : AppColors.onSurface),
+                Icon(
+                  icon,
+                  size: 18,
+                  color: highlighted
+                      ? AppColors.onPrimaryContainer
+                      : AppColors.onSurface,
+                ),
                 const SizedBox(width: 6),
-                Text(label,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: highlighted ? AppColors.onPrimaryContainer : AppColors.onSurface,
-                    )),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: highlighted
+                        ? AppColors.onPrimaryContainer
+                        : AppColors.onSurface,
+                  ),
+                ),
               ],
             ),
           ),
@@ -316,25 +420,39 @@ class _UpNextTile extends StatelessWidget {
                             ? NetworkImage(thumb) as ImageProvider
                             : FileImage(File(thumb)),
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const ColoredBox(color: AppColors.surfaceContainerHigh),
+                        errorBuilder: (_, __, ___) => const ColoredBox(
+                          color: AppColors.surfaceContainerHigh,
+                        ),
                       )
                     else
                       const ColoredBox(
                         color: AppColors.surfaceContainerHigh,
-                        child: Icon(Icons.movie_outlined, color: AppColors.outline),
+                        child: Icon(
+                          Icons.movie_outlined,
+                          color: AppColors.outline,
+                        ),
                       ),
                     if (video.duration != null)
                       Positioned(
                         right: 4,
                         bottom: 4,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.8),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(video.duration!,
-                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                          child: Text(
+                            video.duration!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
                   ],
@@ -347,7 +465,11 @@ class _UpNextTile extends StatelessWidget {
                 video.title,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, height: 1.3),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                ),
               ),
             ),
           ],
