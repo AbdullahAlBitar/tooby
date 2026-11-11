@@ -1,12 +1,16 @@
 import 'dart:async';
-import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
-import '../../../core/theme/app_colors.dart';
 
+import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+
+import '../../core/theme/app_colors.dart';
+
+/// Plays short jumps through a video (10 segments of 2.5 s) while a card is
+/// held down.
 class VideoPreviewWidget extends StatefulWidget {
   final String videoPath;
-  
+
   const VideoPreviewWidget({super.key, required this.videoPath});
 
   @override
@@ -14,65 +18,52 @@ class VideoPreviewWidget extends StatefulWidget {
 }
 
 class _VideoPreviewWidgetState extends State<VideoPreviewWidget> {
-  late VideoPlayerController _controller;
-  bool _isInitialized = false;
+  late final Player _player = Player();
+  late final VideoController _controller = VideoController(_player);
+  StreamSubscription<Duration>? _durationSub;
+  bool _ready = false;
   bool _hasError = false;
-  
+
   Timer? _segmentTimer;
-  int _currentSegmentIndex = 0;
-  final int _totalSegments = 10;
-  final int _segmentDurationMs = 2500; // 2.5s per segment
+  int _segment = 0;
+  static const int _totalSegments = 10;
+  static const int _segmentMs = 2500;
 
   @override
   void initState() {
     super.initState();
-    _initPlayer();
+    _init();
   }
 
-  Future<void> _initPlayer() async {
+  Future<void> _init() async {
     try {
-      if (widget.videoPath.startsWith('http://') || widget.videoPath.startsWith('https://')) {
-        _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoPath));
-      } else {
-        _controller = VideoPlayerController.file(File(widget.videoPath));
-      }
-      await _controller.initialize();
-      // await _controller.setVolume(0.0); // Mute for preview
-      
-      if (mounted) {
-        setState(() {
-          _isInitialized = true;
-        });
-        _playNextSegment();
-      }
+      _durationSub = _player.stream.duration.listen((d) {
+        if (d > Duration.zero && !_ready && mounted) {
+          setState(() => _ready = true);
+          _playNextSegment();
+        }
+      });
+      _player.stream.error.listen((_) {
+        if (mounted && !_ready) setState(() => _hasError = true);
+      });
+      await _player.open(Media(widget.videoPath), play: true);
     } catch (e) {
-      debugPrint("Error initializing preview for ${widget.videoPath}: $e");
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-        });
-      }
+      debugPrint('Error initializing preview for ${widget.videoPath}: $e');
+      if (mounted) setState(() => _hasError = true);
     }
   }
 
-  void _playNextSegment() async {
-    if (!mounted || !_isInitialized) return;
-
-    final totalDurationMs = _controller.value.duration.inMilliseconds;
-    if (totalDurationMs == 0) return;
-
-    // Calculate start time for the current segment
-    // E.g., if total is 100s, segments start at 0s, 10s, 20s... 90s.
-    final segmentOffsetMs = (totalDurationMs / _totalSegments).floor();
-    final startTimeMs = _currentSegmentIndex * segmentOffsetMs;
-    
-    await _controller.seekTo(Duration(milliseconds: startTimeMs));
-    await _controller.play();
-
+  Future<void> _playNextSegment() async {
+    if (!mounted || !_ready) return;
+    final total = _player.state.duration.inMilliseconds;
+    if (total == 0) return;
+    final start = (total / _totalSegments).floor() * _segment;
+    await _player.seek(Duration(milliseconds: start));
+    await _player.play();
     _segmentTimer?.cancel();
-    _segmentTimer = Timer(Duration(milliseconds: _segmentDurationMs), () {
+    _segmentTimer = Timer(const Duration(milliseconds: _segmentMs), () {
       if (!mounted) return;
-      _currentSegmentIndex = (_currentSegmentIndex + 1) % _totalSegments;
+      _segment = (_segment + 1) % _totalSegments;
       _playNextSegment();
     });
   }
@@ -80,61 +71,61 @@ class _VideoPreviewWidgetState extends State<VideoPreviewWidget> {
   @override
   void dispose() {
     _segmentTimer?.cancel();
-    _controller.dispose();
+    _durationSub?.cancel();
+    _player.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_hasError) {
-      return Container(
+      return const ColoredBox(
         color: AppColors.surfaceContainerLow,
-        child: const Center(
-          child: Icon(Icons.error_outline, color: AppColors.error),
-        ),
-      );
-    }
-    
-    if (!_isInitialized) {
-      return Container(
-        color: AppColors.surfaceContainerLow,
-        child: const Center(
-          child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
-        ),
+        child: Center(child: Icon(Icons.error_outline, color: AppColors.error)),
       );
     }
 
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          VideoPlayer(_controller),
-          // A subtle overlay to indicate it's a preview
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.play_circle_outline, color: Colors.white, size: 12),
-                  SizedBox(width: 4),
-                  Text(
-                    "PREVIEW",
-                    style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Video(
+          controller: _controller,
+          controls: NoVideoControls,
+          fit: BoxFit.cover,
+          fill: AppColors.surfaceContainerLow,
+          wakelock: false,
+        ),
+        if (!_ready)
+          const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
             ),
           ),
-        ],
-      ),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.play_circle_outline, color: Colors.white, size: 12),
+                SizedBox(width: 4),
+                Text(
+                  'PREVIEW',
+                  style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

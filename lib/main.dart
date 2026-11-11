@@ -1,35 +1,50 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'core/navigation.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'player/player_layer.dart';
+import 'player/player_service.dart';
 import 'presentation/pages/home/home_page.dart';
 import 'presentation/pages/library/library_page.dart';
-import 'presentation/pages/tags/tag_page.dart';
-import 'presentation/pages/settings/settings_page.dart';
-import 'package:floatube_player/floatube_player.dart' hide PlayerControls, VideoSeekBar;
-import 'presentation/pages/tags/video_tag_editor_page.dart';
 import 'presentation/pages/search/search_page.dart';
-import 'presentation/pages/tags/tag_feed_page.dart';
-import 'presentation/pages/tags/manage_tag_types_page.dart';
 import 'presentation/pages/settings/network_settings_page.dart';
-import 'presentation/widgets/custom_player_controls/player_controls.dart';
-
-import 'dart:io';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'presentation/pages/settings/settings_page.dart';
+import 'presentation/pages/tags/manage_tag_types_page.dart';
+import 'presentation/pages/tags/tag_feed_page.dart';
+import 'presentation/pages/tags/tag_page.dart';
+import 'presentation/pages/tags/video_tag_editor_page.dart';
 
 final navigationIndexProvider = StateProvider<int>((ref) => 0);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  
+  MediaKit.ensureInitialized();
+
   if (Platform.isWindows || Platform.isLinux) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
-  
+
+  // Phone UI is portrait; the player switches to landscape for fullscreen.
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
+  final container = ProviderContainer();
+  // Create the player now so its back-button handler is registered before
+  // the app's navigator (it gets the first chance to handle "back").
+  container.read(playerServiceProvider);
+
   runApp(
-    const ProviderScope(
-      child: ToobyApp(),
+    UncontrolledProviderScope(
+      container: container,
+      child: const ToobyApp(),
     ),
   );
 }
@@ -39,23 +54,21 @@ class ToobyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FloatingViewProvider(
-      controller: FloatingViewController(
-        initialInsets: const ViewportInsets(bottom: kBottomNavigationBarHeight),
-        useCustomControls: true,
-        customControlsBuilder: (videoController, overlayState) {
-          return PlayerControls(
-            controller: videoController,
-            overlayState: overlayState,
-          );
-        },
+    return MaterialApp(
+      title: 'Tooby',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.darkTheme,
+      navigatorKey: rootNavigatorKey,
+      navigatorObservers: [RootRouteObserver.instance],
+      initialRoute: '/',
+      // The player lives above the navigator so it survives page changes.
+      builder: (context, child) => Stack(
+        children: [
+          child!,
+          const Positioned.fill(child: PlayerLayer()),
+        ],
       ),
-      child: MaterialApp(
-        title: 'Tooby',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
-        initialRoute: '/',
-        onGenerateRoute: (settings) {
+      onGenerateRoute: (settings) {
         switch (settings.name) {
           case '/':
             return MaterialPageRoute(builder: (_) => const MainNavigationScreen());
@@ -91,7 +104,7 @@ class ToobyApp extends StatelessWidget {
             return MaterialPageRoute(builder: (_) => const MainNavigationScreen());
         }
       },
-    ));
+    );
   }
 }
 
@@ -102,33 +115,45 @@ class MainNavigationScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedIndex = ref.watch(navigationIndexProvider);
 
-    final List<Widget> pages = [
-      const HomePage(),
-      const LibraryPage(),
-      const TagPage(),
-      const SettingsPage(),
+    const pages = [
+      HomePage(),
+      LibraryPage(),
+      TagPage(),
+      SettingsPage(),
     ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: selectedIndex,
-        children: pages,
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: selectedIndex,
-        onTap: (index) {
+      body: IndexedStack(index: selectedIndex, children: pages),
+      bottomNavigationBar: NavigationBar(
+        height: kAppNavBarHeight,
+        selectedIndex: selectedIndex,
+        backgroundColor: AppColors.surfaceContainerLow,
+        indicatorColor: AppColors.primaryContainer,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: (index) {
           ref.read(navigationIndexProvider.notifier).state = index;
         },
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.onSurfaceVariant,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.video_library), label: 'Library'),
-          BottomNavigationBarItem(icon: Icon(Icons.sell), label: 'Tags'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded, color: AppColors.onPrimaryContainer),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.video_library_outlined),
+            selectedIcon: Icon(Icons.video_library_rounded, color: AppColors.onPrimaryContainer),
+            label: 'Library',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.sell_outlined),
+            selectedIcon: Icon(Icons.sell_rounded, color: AppColors.onPrimaryContainer),
+            label: 'Tags',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings_rounded, color: AppColors.onPrimaryContainer),
+            label: 'Settings',
+          ),
         ],
       ),
     );
