@@ -209,32 +209,46 @@ class VideoScannerService {
     return removedCount;
   }
 
-  Future<void> renameVideo(int videoId, String newTitle) async {
+  /// Renames the video file on disk and updates the database.
+  /// Returns the updated video.
+  Future<VideoModel> renameVideo(int videoId, String newTitle) async {
     final video = await _videoRepository.getVideoById(videoId);
     if (video == null) throw Exception("Video not found in database.");
 
+    // Sanitize the new title for the file system.
+    final String sanitizedTitle = newTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+    if (sanitizedTitle.isEmpty) throw Exception("Please enter a valid name.");
+
     final File file = File(video.path);
     if (!await file.exists()) {
-      throw Exception("Original video file not found on disk.");
+      throw Exception("The video file was not found on disk. It may have been moved or deleted.");
     }
 
     final String dir = p.dirname(video.path);
     final String ext = p.extension(video.path);
-    
-    // Sanitize the new title for file system
-    final String sanitizedTitle = newTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
-    if (sanitizedTitle.isEmpty) throw Exception("Invalid title.");
+    final String newPath = p.join(dir, '$sanitizedTitle$ext');
 
-    final String newFileName = '$sanitizedTitle$ext';
-    final String newPath = p.join(dir, newFileName);
-
-    final File newFile = File(newPath);
-    if (await newFile.exists() && newPath != video.path) {
-      throw Exception("A file with this name already exists in the same folder.");
+    if (newPath == video.path) {
+      return video;
     }
 
-    await file.rename(newPath);
-    await _videoRepository.updateVideo(video.copyWith(title: sanitizedTitle, path: newPath));
+    // Case-only renames (e.g. "clip" -> "Clip") must not be treated as a conflict.
+    final bool caseOnlyChange = newPath.toLowerCase() == video.path.toLowerCase();
+    if (!caseOnlyChange && await File(newPath).exists()) {
+      throw Exception("A file named \"$sanitizedTitle$ext\" already exists in this folder.");
+    }
+
+    if (caseOnlyChange) {
+      // Go through a temporary name so case-insensitive file systems accept it.
+      final tmp = await file.rename(p.join(dir, '.tooby_rename_${DateTime.now().millisecondsSinceEpoch}$ext'));
+      await tmp.rename(newPath);
+    } else {
+      await file.rename(newPath);
+    }
+
+    final updated = video.copyWith(title: sanitizedTitle, path: newPath);
+    await _videoRepository.updateVideo(updated);
+    return updated;
   }
 
   String _getRelativePath(String filePath) {
